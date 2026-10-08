@@ -113,6 +113,18 @@ def test_a_failed_replacement_after_a_removal_restores_both_files(repository: Pa
     assert leftover_temporaries(repository) == []
 
 
+def test_a_failed_landing_recreates_a_removed_file_with_its_permission_bits(repository: Path) -> None:
+    (repository / "kept.md").chmod(0o640)
+    (repository / "other.md").write_bytes(b"other before\n")
+    store = Store(root=repository, replace_file=failing_on_call(1))
+    with pytest.raises(OSError, match="replacement of other.md failed"):
+        with store.transaction() as act:
+            act.remove("kept.md")
+            act.replace("other.md", "other after\n")
+    assert (repository / "kept.md").read_bytes() == b"kept line\n"
+    assert (repository / "kept.md").stat().st_mode & 0o777 == 0o640
+
+
 def test_an_append_after_a_replacement_extends_the_replacement(repository: Path) -> None:
     with Store(root=repository, replace_file=os.replace).transaction() as act:
         act.replace("kept.md", "fresh\n")

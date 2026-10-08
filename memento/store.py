@@ -18,14 +18,22 @@ NEW_RECORD_MODE = 0o644
 
 
 class RestoreFailed(Exception):
-    """A failed landing whose rollback left a file differing from its bytes before the act."""
+    """A failed landing whose rollback left a file differing from its bytes or permission bits before the act."""
+
+
+@dataclass(frozen=True)
+class Snapshot:
+    """A file's bytes and permission bits."""
+
+    content: bytes
+    mode: int
 
 
 @dataclass(frozen=True)
 class Staged:
-    """One file's bytes before an act and after it, None meaning the file is absent."""
+    """One file as it stood before an act and the bytes it holds after, None meaning the file is absent."""
 
-    before: bytes | None
+    before: Snapshot | None
     after: bytes | None
 
 
@@ -55,7 +63,7 @@ class Act:
 
     def stage(self, path: str, after: bytes | None) -> None:
         """Record what a file holds once the act lands, beside its bytes before the act."""
-        self.staged[path] = Staged(before=read_if_present(self.root / path), after=after)
+        self.staged[path] = Staged(before=snapshot_if_present(self.root / path), after=after)
 
 
 @dataclass(frozen=True)
@@ -95,6 +103,11 @@ def record_lock(root: Path) -> Iterator[None]:
 def read_if_present(path: Path) -> bytes | None:
     """A file's bytes, or None when it does not exist."""
     return path.read_bytes() if path.exists() else None
+
+
+def snapshot_if_present(path: Path) -> Snapshot | None:
+    """A file's bytes and permission bits, or None when it does not exist."""
+    return Snapshot(content=path.read_bytes(), mode=stat.S_IMODE(path.stat().st_mode)) if path.exists() else None
 
 
 def first_edited_line(head: bytes, working: bytes) -> int | None:
@@ -153,16 +166,17 @@ def write_temporaries(root: Path, staged: Mapping[str, Staged]) -> dict[str, Pat
     return temporaries
 
 
-def restore(root: Path, befores: Mapping[str, bytes | None]) -> None:
-    """Put each landed file back to its bytes before the act, and verify every one byte for byte."""
+def restore(root: Path, befores: Mapping[str, Snapshot | None]) -> None:
+    """Put each landed file back to its bytes and permission bits before the act, and verify every one."""
     for path, before in befores.items():
         if before is None:
             (root / path).unlink(missing_ok=True)
         else:
-            (root / path).write_bytes(before)
-    differing = [path for path, before in befores.items() if read_if_present(root / path) != before]
+            (root / path).write_bytes(before.content)
+            (root / path).chmod(before.mode)
+    differing = [path for path, before in befores.items() if snapshot_if_present(root / path) != before]
     if differing:
-        raise RestoreFailed(f"rollback left {', '.join(differing)} differing from the bytes before the act")
+        raise RestoreFailed(f"rollback left {', '.join(differing)} differing from its bytes or permission bits before the act")
 
 
 def land(root: Path, staged: Mapping[str, Staged], replace_file: Callable[[Path, Path], None]) -> None:
