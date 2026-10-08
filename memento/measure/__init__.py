@@ -3,5 +3,5 @@
 import typer
 
 measurement_group = typer.Typer(
-    no_args_is_help=True, help="The measurement log: run, log, add, void, find, compare, status, quote."
+    no_args_is_help=True, help="The measurement log: run, log, add, void, find, compare, quote."
 )

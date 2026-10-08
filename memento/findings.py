@@ -1,7 +1,7 @@
 """What a record check reads, the corpus, and what it reports, findings."""
 
 import re
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 from dataclasses import dataclass
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Any, NamedTuple
@@ -76,6 +76,11 @@ class Corpus:
 
 
 type Check = Callable[[Corpus], Iterator[Finding]]
+
+
+def run_checks(corpus: Corpus, checks: Iterable[Check]) -> list[Finding]:
+    """Every finding of every check over a corpus, in the checks' order."""
+    return [finding for check_records in checks for finding in check_records(corpus)]
 
 
 def split_entries(text: str) -> Iterator[tuple[int, str, list[str]]]:

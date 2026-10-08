@@ -1,7 +1,7 @@
 """The schema `.claude/memento.yaml` declares, and what memento knows of it."""
 
 import re
-from collections.abc import Iterator
+from collections.abc import Collection, Iterator
 from pathlib import Path
 from typing import Any, Literal, get_args
 
@@ -10,6 +10,7 @@ import yaml
 from memento import Refusal
 from memento.actor import ACTOR_FORMS
 from memento.findings import Corpus, Finding, fail
+from memento.git import tracked_files
 
 SCHEMA_HOME = ".claude/memento.yaml"
 DATE_PLACEHOLDER = "{date}"
@@ -19,6 +20,7 @@ ISO_DATE_SEGMENT = r"\d{4}-\d{2}-\d{2}"
 ANY_SEGMENT_RUN = r"[^/]*"
 ANYTHING_BENEATH = r".+"
 AMEND_TOGETHER = "amend the module with the schema"
+OWNER_STATED = "owner-stated"
 EXACT_HOME_RANK = 0
 WILDCARD_HOME_RANK = 1
 DIRECTORY_HOME_RANK = 2
@@ -33,6 +35,7 @@ KNOWN_KINDS = (
     "fact",
     "results",
     "measurement",
+    "spec",
     "deferral",
     "string_recipes",
     "label_audit",
@@ -63,6 +66,11 @@ def load_schema(root: Path) -> Schema:
     return yaml.safe_load((root / SCHEMA_HOME).read_text(encoding="utf-8"))
 
 
+def load_corpus(root: Path) -> Corpus:
+    """The corpus every check reads: root's schema, its tracked paths, and its working tree."""
+    return Corpus(root=root, schema=load_schema(root), tracked=tracked_files(root))
+
+
 def structure_disagreements(schema: Schema) -> list[str]:
     """Each place the schema's declared structure differs from the structure memento is built for."""
     declared_kinds = list(schema["kinds"])
@@ -86,9 +94,24 @@ def agreeing_schema(root: Path) -> Schema:
     return schema
 
 
-def check_structure(corpus: Corpus) -> Iterator[Finding]:
-    """Fail the schema wherever its declared structure differs from memento's."""
-    for disagreement in structure_disagreements(corpus.schema):
+def owner_only_kinds(schema: Schema) -> list[str]:
+    """The kinds the schema marks owner-stated, which memento never writes."""
+    return [kind for kind, spec in schema["kinds"].items() if spec.get("verification") == OWNER_STATED]
+
+
+def owner_only_group_disagreements(schema: Schema, registered_groups: Collection[str]) -> list[str]:
+    """Each owner-only kind for which memento registers a command group."""
+    return [
+        f"schema marks {kind} {OWNER_STATED}; memento registers a '{kind}' group"
+        for kind in owner_only_kinds(schema)
+        if kind in registered_groups
+    ]
+
+
+def check_structure(corpus: Corpus, registered_groups: Collection[str]) -> Iterator[Finding]:
+    """Fail the schema wherever its declared structure differs from memento's, or an owner-only kind has a group."""
+    disagreements = structure_disagreements(corpus.schema) + owner_only_group_disagreements(corpus.schema, registered_groups)
+    for disagreement in disagreements:
         yield fail(SCHEMA_HOME, f"{disagreement}; {AMEND_TOGETHER}")
 
 

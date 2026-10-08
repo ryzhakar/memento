@@ -7,14 +7,14 @@ from collections.abc import Iterator
 import typer
 
 from memento.findings import DATE, SHA, Corpus, Finding, fail
-from memento.pointers import check_ground, home_of
+from memento.pointers import ground_findings, home_of
 from memento.schema import DATE_PLACEHOLDER, SCHEMA_HOME
 
-directive_group = typer.Typer(no_args_is_help=True, help="Conventions: add, drop or replace a rule.")
-results_group = typer.Typer(no_args_is_help=True, help="Results: add or drop a contender's row.")
-deferral_group = typer.Typer(no_args_is_help=True, help="Deferrals: add the owner's postponed item, or resolve one.")
+directive_group = typer.Typer(no_args_is_help=True, help="Conventions: add, replace or drop a rule.")
+results_group = typer.Typer(no_args_is_help=True, help="Results: add, replace or drop a contender's row.")
 fact_group = typer.Typer(no_args_is_help=True, help="Capabilities: replace one exact passage.")
-schema_group = typer.Typer(no_args_is_help=True, help="The schema: amend it on the owner's word.")
+string_recipes_group = typer.Typer(no_args_is_help=True, help="String-comparison recipes: replace one exact passage.")
+spec_group = typer.Typer(no_args_is_help=True, help="Specifications: add one, replace one exact passage, archive one.")
 map_group = typer.Typer(no_args_is_help=True, help="The map: render it from the schema.")
 
 MAP_COLUMNS = 4
@@ -175,7 +175,7 @@ def check_directives(corpus: Corpus) -> Iterator[Finding]:
                 continue
             order.append(label)
             if label == "ground":
-                yield from check_ground(corpus, f"{path}:{line_number}", line[width:])
+                yield from ground_findings(corpus, f"{path}:{line_number}", line[width:])
         missing = [label for label in spec["required_labels"] if label not in order]
         if missing:
             yield fail(where, f"{rule_id}: missing {', '.join(missing)}")

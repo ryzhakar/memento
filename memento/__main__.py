@@ -1,16 +1,31 @@
 """The `memento` command: the one way into and out of the project's records."""
 
 import os
+from functools import partial
 from pathlib import Path
 
 import typer
 
 from memento import Environment, changelog, clock, journal, living, measure, pointers, schema
-from memento.findings import FAIL, Check, Corpus, Finding
-from memento.git import tracked_files
+from memento.findings import FAIL, Check, run_checks
+from memento.schema import load_corpus
 from memento.store import Store
 
 FAILED_CHECK_EXIT_CODE = 1
+
+KIND_GROUPS = {
+    "events": journal.events_group,
+    "failure": journal.failure_group,
+    "digest": journal.digest_group,
+    "change": changelog.change_group,
+    "directive": living.directive_group,
+    "results": living.results_group,
+    "fact": living.fact_group,
+    "string_recipes": living.string_recipes_group,
+    "spec": living.spec_group,
+    "map": living.map_group,
+    "measurement": measure.measurement_group,
+}
 
 CHECKS: tuple[Check, ...] = (
     living.check_charter,
@@ -28,36 +43,12 @@ CHECKS: tuple[Check, ...] = (
     pointers.check_budgets,
     pointers.check_history_admission,
     pointers.check_nul_bytes,
-    schema.check_structure,
+    partial(schema.check_structure, registered_groups=tuple(KIND_GROUPS)),
 )
 
 app = typer.Typer(name="memento", no_args_is_help=True, add_completion=False)
-KIND_GROUPS = {
-    "events": journal.events_group,
-    "span": journal.span_group,
-    "failure": journal.failure_group,
-    "digest": journal.digest_group,
-    "change": changelog.change_group,
-    "directive": living.directive_group,
-    "results": living.results_group,
-    "deferral": living.deferral_group,
-    "fact": living.fact_group,
-    "schema": living.schema_group,
-    "map": living.map_group,
-    "measurement": measure.measurement_group,
-}
 for group_name, group in KIND_GROUPS.items():
     app.add_typer(group, name=group_name)
-
-
-def load_corpus(root: Path) -> Corpus:
-    """The corpus every check reads: root's schema, its tracked paths, and its working tree."""
-    return Corpus(root=root, schema=schema.load_schema(root), tracked=tracked_files(root))
-
-
-def run_checks(corpus: Corpus) -> list[Finding]:
-    """Every finding of every registered check, in registry order."""
-    return [finding for check_records in CHECKS for finding in check_records(corpus)]
 
 
 @app.command(
@@ -69,7 +60,7 @@ def run_checks(corpus: Corpus) -> list[Finding]:
 def check(ctx: typer.Context) -> None:
     """Report every record finding and exit 1 on any failing one."""
     environment: Environment = ctx.obj
-    findings = run_checks(load_corpus(environment.store.root))
+    findings = run_checks(load_corpus(environment.store.root), environment.checks)
     for finding in findings:
         typer.echo(f"{finding.level}  {finding.where}  {finding.message}")
     failures = sum(finding.level == FAIL for finding in findings)
@@ -78,9 +69,9 @@ def check(ctx: typer.Context) -> None:
 
 
 def main() -> None:
-    """Run the command against the checkout this package sits in, with the wall clock and atomic file replacement."""
+    """Run the command against the checkout this package sits in, with the wall clock, atomic replacement and every check."""
     root = Path(__file__).resolve().parent.parent
-    app(obj=Environment(store=Store(root=root, replace_file=os.replace), now=clock.now))
+    app(obj=Environment(store=Store(root=root, replace_file=os.replace), now=clock.now, checks=CHECKS))
 
 
 if __name__ == "__main__":

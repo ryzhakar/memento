@@ -60,7 +60,7 @@ def commit_exists(corpus: Corpus, sha: str) -> bool:
     return corpus.holds_object(f"{sha}^{{commit}}")
 
 
-def check_ground(corpus: Corpus, where: str, ground: str) -> Iterator[Finding]:
+def ground_findings(corpus: Corpus, where: str, ground: str) -> Iterator[Finding]:
     """Fail a ground naming an uncommitted path, or naming no path, SHA, record heading or dated owner ruling."""
     paths = GROUND_PATH.findall(ground)
     for token in paths:

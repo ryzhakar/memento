@@ -12,6 +12,7 @@ import typer
 from pydantic import BaseModel, ValidationError
 
 if TYPE_CHECKING:
+    from memento.findings import Check
     from memento.store import Store
 
 REFUSED_EXIT_CODE = 1
@@ -23,10 +24,11 @@ class Refusal(Exception):
 
 @dataclass(frozen=True)
 class Environment:
-    """The side effects a command receives from the composition root: the record store and the clock."""
+    """What a command receives from the composition root: the record store, the clock and the record checks."""
 
     store: Store
     now: Callable[[], datetime]
+    checks: tuple[Check, ...]
 
 
 @contextmanager

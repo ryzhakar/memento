@@ -1,8 +1,12 @@
 """`memento check` reports each record defect the ported checks find, one tree per defect."""
 
+import ast
+from functools import partial
 from pathlib import Path
 
-from tests.memento.conftest import HISTORY, fixture_schema, git, replace_once, run_memento
+from memento.__main__ import CHECKS
+from memento.findings import Check
+from tests.memento.conftest import HISTORY, PROJECT_ROOT, fixture_schema, git, replace_once, run_memento
 
 CLEAN_SUMMARY = "records: 0 FAIL, 0 WARN\n"
 CLOSED_SPAN = f"{HISTORY}/2026-09-30"
@@ -147,3 +151,43 @@ def test_a_schema_dropping_an_event_kind_fails_the_structure_agreement(record_tr
         f"FAIL  .claude/memento.yaml  schema declares events {declared}; memento knows {known}; "
         "amend the module with the schema",
     )
+
+
+def test_a_group_registered_for_an_owner_only_kind_fails_the_structure_agreement(record_tree: Path) -> None:
+    replace_once(
+        record_tree,
+        ".claude/memento.yaml",
+        "home: docs/capabilities.md\n    tier: dossier\n    load: need\n    verification: measured\n",
+        "home: docs/capabilities.md\n    tier: dossier\n    load: need\n    verification: owner-stated\n",
+    )
+    assert_single_failure(
+        record_tree,
+        "FAIL  .claude/memento.yaml  schema marks fact owner-stated; memento registers a 'fact' group; "
+        "amend the module with the schema",
+    )
+
+
+def test_the_check_command_runs_the_checks_its_environment_carries(record_tree: Path) -> None:
+    replace_once(record_tree, "docs/results.md", "2026-10-01", "October")
+    result = run_memento(record_tree, "check", checks=())
+    assert (result.exit_code, result.stdout) == (0, CLEAN_SUMMARY)
+
+
+def registered_name(check: Check) -> str:
+    """The module-qualified name of a registered check, looking through a partial binding."""
+    function = check.func if isinstance(check, partial) else check
+    return f"{function.__module__}.{function.__name__}"
+
+
+def defined_check_names() -> set[str]:
+    """Every top-level `check_*` function defined in a module under memento/."""
+    names = set()
+    for path in sorted((PROJECT_ROOT / "memento").rglob("*.py")):
+        module = ".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts).removesuffix(".__init__")
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        names |= {f"{module}.{node.name}" for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("check_")}
+    return names
+
+
+def test_every_check_defined_under_memento_is_in_the_check_tuple() -> None:
+    assert defined_check_names() == {registered_name(check) for check in CHECKS}

@@ -25,17 +25,16 @@ from memento.schema import (
     events_home,
 )
 
-events_group = typer.Typer(no_args_is_help=True, help="Events: one line per event, appended to the open span's events file.")
-span_group = typer.Typer(no_args_is_help=True, help="Spans: open one, or close it with its close block.")
+events_group = typer.Typer(no_args_is_help=True, help="Events: open a span, add a line to its events file, tail it.")
 failure_group = typer.Typer(no_args_is_help=True, help="Failures: an entry together with its events line.")
-digest_group = typer.Typer(no_args_is_help=True, help="The span's narrative and its close block.")
+digest_group = typer.Typer(no_args_is_help=True, help="The span's narrative: add a paragraph, close the span, print the newest close block.")
 
 ROUTED_ELSEWHERE = {
-    "span-event": "span-event lines are written by 'just memento span open|close'",
+    "span-event": "span-event lines are written by 'just memento events open' or 'just memento digest close'",
     "failure": "a failure is written by 'just memento failure add', which writes its entry and its events line together",
     "change": "change goes to the change log: 'just memento change add'",
 }
-NO_OPEN_SPAN = "no span is open; 'just memento span open <what>'"
+NO_OPEN_SPAN = "no span is open; 'just memento events open <what>'"
 SPAN_EVENT = "span-event"
 SPAN_OPENING = "open"
 SPAN_CLOSING = "close"
