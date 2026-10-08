@@ -1,5 +1,6 @@
 """What a record check reads, the corpus, and what it reports, findings."""
 
+import fnmatch
 import re
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from dataclasses import dataclass, field, replace
@@ -89,7 +90,7 @@ class Corpus:
         """The project-relative paths a glob pattern matches, sorted as paths."""
         on_disk = {normalized(path.relative_to(self.root)) for path in self.root.glob(pattern)}
         deleted = {path for path, text in self.changes.items() if text is None}
-        added = {path for path, text in self.changes.items() if text is not None and PurePosixPath(path).full_match(pattern)}
+        added = {path for path, text in self.changes.items() if text is not None and matches_glob(path, pattern)}
         return sorted((on_disk - deleted) | added, key=PurePosixPath)
 
     def holds_object(self, revision: str) -> bool:
@@ -98,6 +99,12 @@ class Corpus:
 
 
 type Check = Callable[[Corpus], Iterator[Finding]]
+
+
+def matches_glob(path: str, pattern: str) -> bool:
+    """Whether a project-relative path matches a glob pattern segment by segment, as a pathlib glob without `**` does."""
+    path_parts, pattern_parts = PurePosixPath(path).parts, PurePosixPath(pattern).parts
+    return len(path_parts) == len(pattern_parts) and all(map(fnmatch.fnmatchcase, path_parts, pattern_parts))
 
 
 def run_checks(corpus: Corpus, checks: Iterable[Check]) -> list[Finding]:

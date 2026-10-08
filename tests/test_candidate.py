@@ -113,7 +113,8 @@ def test_one_new_failure_on_two_lines_is_named_once(record_tree: Path) -> None:
 
 def test_a_substituted_corpus_reads_changed_added_and_deleted_paths(record_tree: Path) -> None:
     added, deleted = f"{HISTORY}/2026-10-02/events.md", f"{HISTORY}/2026-09-30/events.md"
-    corpus = load_corpus(record_tree).substituted({CAPABILITIES: "changed\n", added: "added\n", deleted: None})
+    unmatched = {f"{HISTORY}/2026-10-02/notes.md": "x\n", f"{HISTORY}/2026-10-02/events-x.md/inner.md": "x\n"}
+    corpus = load_corpus(record_tree).substituted({CAPABILITIES: "changed\n", added: "added\n", deleted: None} | unmatched)
     assert (corpus.text(CAPABILITIES), corpus.raw(added)) == ("changed\n", b"added\n")
     assert (corpus.exists(added), corpus.is_file(added), corpus.exists(deleted), corpus.is_file(deleted)) == (True, True, False, False)
     assert corpus.glob(f"{HISTORY}/*/events*.md") == [f"{HISTORY}/2026-10-01/events.md", added]
