@@ -38,11 +38,12 @@ class Act:
 
     def append(self, path: str, text: str) -> None:
         """Stage text appended to a file, refusing when its working copy edits a line HEAD holds."""
-        if path not in self.staged:
-            working = read_if_present(self.root / path)
-            refuse_edited_head_lines(path, working or b"", file_at_head(self.root, path) or b"")
-            self.staged[path] = Staged(before=working, after=working)
-        self.stage(path, (self.staged[path].after or b"") + text.encode("utf-8"))
+        if path in self.staged:
+            base = self.staged[path].after or b""
+        else:
+            base = read_if_present(self.root / path) or b""
+            refuse_edited_head_lines(path, base, file_at_head(self.root, path) or b"")
+        self.stage(path, base + text.encode("utf-8"))
 
     def replace(self, path: str, text: str) -> None:
         """Stage new whole content for a file, created when absent."""
@@ -53,9 +54,8 @@ class Act:
         self.stage(path, None)
 
     def stage(self, path: str, after: bytes | None) -> None:
-        """Record what a file holds once the act lands, keeping its bytes from before the act's first touch."""
-        before = self.staged[path].before if path in self.staged else read_if_present(self.root / path)
-        self.staged[path] = Staged(before=before, after=after)
+        """Record what a file holds once the act lands, beside its bytes before the act."""
+        self.staged[path] = Staged(before=read_if_present(self.root / path), after=after)
 
 
 @dataclass(frozen=True)
