@@ -4,9 +4,18 @@ import fnmatch
 import re
 from collections.abc import Iterator
 
+import typer
+
 from memento.findings import DATE, SHA, Corpus, Finding, fail
 from memento.pointers import check_ground, home_of
 from memento.schema import DATE_PLACEHOLDER, SCHEMA_HOME
+
+directive_group = typer.Typer(no_args_is_help=True, help="Conventions: add, drop or replace a rule.")
+results_group = typer.Typer(no_args_is_help=True, help="Results: add or drop a contender's row.")
+deferral_group = typer.Typer(no_args_is_help=True, help="Deferrals: add the owner's postponed item, or resolve one.")
+fact_group = typer.Typer(no_args_is_help=True, help="Capabilities: replace one exact passage.")
+schema_group = typer.Typer(no_args_is_help=True, help="The schema: amend it on the owner's word.")
+map_group = typer.Typer(no_args_is_help=True, help="The map: render it from the schema.")
 
 MAP_COLUMNS = 4
 MAP_HEADER_CELLS = ("path", "---")

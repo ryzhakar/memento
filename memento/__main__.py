@@ -5,7 +5,7 @@ from pathlib import Path
 
 import typer
 
-from memento import Environment, changelog, clock, journal, living, pointers, schema
+from memento import Environment, changelog, clock, journal, living, measure, pointers, schema
 from memento.findings import FAIL, Check, Corpus, Finding
 from memento.git import tracked_files
 from memento.store import Store
@@ -16,7 +16,7 @@ CHECKS: tuple[Check, ...] = (
     living.check_charter,
     living.check_map,
     changelog.check_change_log,
-    journal.check_traces,
+    journal.check_event_lines,
     journal.check_close_blocks,
     living.check_directives,
     changelog.check_change_log_pointers,
@@ -32,7 +32,22 @@ CHECKS: tuple[Check, ...] = (
 )
 
 app = typer.Typer(name="memento", no_args_is_help=True, add_completion=False)
-app.add_typer(journal.trace_group, name="trace")
+KIND_GROUPS = {
+    "events": journal.events_group,
+    "span": journal.span_group,
+    "failure": journal.failure_group,
+    "digest": journal.digest_group,
+    "change": changelog.change_group,
+    "directive": living.directive_group,
+    "results": living.results_group,
+    "deferral": living.deferral_group,
+    "fact": living.fact_group,
+    "schema": living.schema_group,
+    "map": living.map_group,
+    "measurement": measure.measurement_group,
+}
+for group_name, group in KIND_GROUPS.items():
+    app.add_typer(group, name=group_name)
 
 
 def load_corpus(root: Path) -> Corpus:

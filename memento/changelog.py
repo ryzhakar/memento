@@ -3,8 +3,12 @@
 import re
 from collections.abc import Iterator
 
+import typer
+
 from memento.findings import DATE, Corpus, Finding, fail, split_entries
 from memento.pointers import home_of
+
+change_group = typer.Typer(no_args_is_help=True, help="The change log: add an entry, supersede one, age the oldest out.")
 
 ENTRY_HEADER = re.compile(rf"^## (?P<start>{DATE})(?: → {DATE})? — \S")
 FIELD_LABEL = re.compile(r"^(?P<label>[A-Z][A-Z →-]*[A-Z]):(?P<pad> *)")

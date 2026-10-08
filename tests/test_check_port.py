@@ -35,7 +35,7 @@ def test_a_mispadded_label_fails_the_change_log(record_tree: Path) -> None:
     assert_single_failure(record_tree, "FAIL  docs/architecture_log.md:6  WHY label is not padded to column 15")
 
 
-def test_a_trace_line_going_back_in_time_fails_the_trace(record_tree: Path) -> None:
+def test_an_events_line_going_back_in_time_fails_the_events_file(record_tree: Path) -> None:
     replace_once(record_tree, f"{OPEN_SPAN}/events.md", "2026-10-01T09:10", "2026-10-01T08:59")
     assert_single_failure(
         record_tree, f"FAIL  {OPEN_SPAN}/events.md:2  time 2026-10-01T08:59 goes back from 2026-10-01T09:00"
@@ -82,9 +82,9 @@ def test_a_failure_entry_missing_its_mechanism_fails_the_failure_record(record_t
     )
 
 
-def test_a_span_close_without_its_close_block_fails_the_trace(record_tree: Path) -> None:
-    with (record_tree / CLOSED_SPAN / "events.md").open("a", encoding="utf-8") as trace:
-        trace.write("2026-09-30T18:10 | self | span-event | close; again\n")
+def test_a_span_close_without_its_close_block_fails_the_events_file(record_tree: Path) -> None:
+    with (record_tree / CLOSED_SPAN / "events.md").open("a", encoding="utf-8") as events_file:
+        events_file.write("2026-09-30T18:10 | self | span-event | close; again\n")
     assert_single_failure(
         record_tree, f"FAIL  {CLOSED_SPAN}/events.md  2 span closes but 1 close blocks in {CLOSED_SPAN}/session.md"
     )
@@ -120,25 +120,25 @@ def test_a_nul_byte_in_a_record_fails_the_record(record_tree: Path) -> None:
 
 
 def test_a_schema_dropping_an_event_kind_fails_the_structure_agreement(record_tree: Path) -> None:
-    replace_once(record_tree, ".claude/memento.yaml", "  attenuation: trace\n", "")
+    replace_once(record_tree, ".claude/memento.yaml", "  attenuation: events\n", "")
     declared = {
-        "decision": "trace",
-        "discovery": "trace",
-        "commitment": "trace",
-        "delegation": "trace",
-        "receipt": "trace",
-        "span-event": "trace",
+        "decision": "events",
+        "discovery": "events",
+        "commitment": "events",
+        "delegation": "events",
+        "receipt": "events",
+        "span-event": "events",
         "failure": "failure",
         "change": "change",
     }
     known = {
-        "decision": "trace",
-        "discovery": "trace",
-        "commitment": "trace",
-        "delegation": "trace",
-        "receipt": "trace",
-        "attenuation": "trace",
-        "span-event": "trace",
+        "decision": "events",
+        "discovery": "events",
+        "commitment": "events",
+        "delegation": "events",
+        "receipt": "events",
+        "attenuation": "events",
+        "span-event": "events",
         "failure": "failure",
         "change": "change",
     }

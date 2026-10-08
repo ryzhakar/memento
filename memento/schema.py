@@ -38,7 +38,7 @@ KNOWN_KINDS = (
     "label_audit",
     "label_defects",
     "reference",
-    "trace",
+    "events",
     "digest",
     "failure",
     "report",
@@ -47,9 +47,10 @@ KNOWN_KINDS = (
 )
 
 EventKind = Literal["decision", "discovery", "commitment", "delegation", "receipt", "attenuation"]
-TRACE_EVENT_KINDS: tuple[str, ...] = get_args(EventKind)
-KNOWN_EVENT_ROUTES = {kind: "trace" for kind in TRACE_EVENT_KINDS} | {
-    "span-event": "trace",
+EVENTS_KIND = "events"
+EVENT_KINDS: tuple[str, ...] = get_args(EventKind)
+KNOWN_EVENT_ROUTES = {kind: EVENTS_KIND for kind in EVENT_KINDS} | {
+    "span-event": EVENTS_KIND,
     "failure": "failure",
     "change": "change",
 }
@@ -65,14 +66,14 @@ def load_schema(root: Path) -> Schema:
 def structure_disagreements(schema: Schema) -> list[str]:
     """Each place the schema's declared structure differs from the structure memento is built for."""
     declared_kinds = list(schema["kinds"])
-    declared_actors = list(schema["kinds"].get("trace", {}).get("actors", []))
+    declared_actors = list(schema["kinds"].get(EVENTS_KIND, {}).get("actors", []))
     disagreements = []
     if set(declared_kinds) != set(KNOWN_KINDS):
         disagreements.append(f"schema declares kinds {declared_kinds}; memento knows {list(KNOWN_KINDS)}")
     if schema["events"] != KNOWN_EVENT_ROUTES:
         disagreements.append(f"schema declares events {schema['events']}; memento knows {KNOWN_EVENT_ROUTES}")
     if declared_actors != list(ACTOR_FORMS):
-        disagreements.append(f"schema declares trace actors {declared_actors}; memento knows {list(ACTOR_FORMS)}")
+        disagreements.append(f"schema declares events actors {declared_actors}; memento knows {list(ACTOR_FORMS)}")
     return disagreements
 
 
@@ -114,6 +115,6 @@ def kind_for(schema: Schema, path: str) -> str | None:
     return min(covering, key=lambda kind: home_precedence(schema["kinds"][kind]["home"]), default=None)
 
 
-def trace_home(schema: Schema) -> str:
-    """The home the schema gives the trace."""
-    return schema["kinds"]["trace"]["home"]
+def events_home(schema: Schema) -> str:
+    """The home the schema gives the events kind."""
+    return schema["kinds"][EVENTS_KIND]["home"]

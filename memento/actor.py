@@ -1,4 +1,4 @@
-"""Who an event line names as its author: the owner, this session, a named agent, or a named tool."""
+"""Who an events line names as its author: the owner, this session, a named agent, or a named tool."""
 
 import re
 from typing import Annotated
@@ -21,7 +21,7 @@ class Owner(BaseModel):
     model_config = FROZEN
 
     def render(self) -> str:
-        """The actor as a trace line spells it."""
+        """The actor as an events line spells it."""
         return "owner"
 
 
@@ -31,7 +31,7 @@ class Self_(BaseModel):
     model_config = FROZEN
 
     def render(self) -> str:
-        """The actor as a trace line spells it."""
+        """The actor as an events line spells it."""
         return "self"
 
 
@@ -42,7 +42,7 @@ class Agent(BaseModel):
     name: ActorName
 
     def render(self) -> str:
-        """The actor as a trace line spells it."""
+        """The actor as an events line spells it."""
         return f"agent:{self.name}"
 
 
@@ -53,7 +53,7 @@ class Tool(BaseModel):
     name: ActorName
 
     def render(self) -> str:
-        """The actor as a trace line spells it."""
+        """The actor as an events line spells it."""
         return f"tool:{self.name}"
 
 
@@ -61,7 +61,7 @@ type Actor = Owner | Self_ | Agent | Tool
 
 
 def parse_actor(text: str) -> Actor:
-    """The actor a trace line's actor field spells, refusing any other spelling."""
+    """The actor an events line's actor field spells, refusing any other spelling."""
     if text == "owner":
         return Owner()
     if text == "self":
