@@ -1,6 +1,7 @@
 """A change lands only if its candidate corpus adds no FAIL the current corpus lacks, identified by path and message."""
 
 import os
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -8,7 +9,7 @@ import pytest
 from memento import Environment, Refusal
 from memento.__main__ import CHECKS
 from memento.candidate import refuse_new_failures
-from memento.findings import Check
+from memento.findings import Check, Corpus, Finding, warn
 from memento.schema import load_corpus
 from memento.store import Store
 from tests.memento.conftest import FIXED_NOW, HISTORY, replace_once
@@ -87,6 +88,27 @@ def test_two_new_failures_are_both_named_in_check_order(record_tree: Path) -> No
 def test_the_candidate_runs_the_checks_its_environment_carries(record_tree: Path) -> None:
     changes = {CAPABILITIES: CLEAN_CAPABILITIES.replace("The scorer slices its input.\n", MISSING_POINTER)}
     refuse_new_failures(environment_for(record_tree, checks=()), changes)
+
+
+def warn_on_missing_pointer(corpus: Corpus) -> Iterator[Finding]:
+    """A check that only warns, for each capabilities line naming docs/missing.md."""
+    for number, line in enumerate(corpus.text(CAPABILITIES).splitlines(), 1):
+        if "docs/missing.md" in line:
+            yield warn(f"{CAPABILITIES}:{number}", "names docs/missing.md")
+
+
+def test_a_new_warning_does_not_block_a_change(record_tree: Path) -> None:
+    changes = {CAPABILITIES: CLEAN_CAPABILITIES.replace("The scorer slices its input.\n", MISSING_POINTER)}
+    refuse_new_failures(environment_for(record_tree, checks=(warn_on_missing_pointer,)), changes)
+
+
+def test_one_new_failure_on_two_lines_is_named_once(record_tree: Path) -> None:
+    changes = {CAPABILITIES: CLEAN_CAPABILITIES.replace("The scorer slices its input.\n", MISSING_POINTER + "\n" + MISSING_POINTER)}
+    with pytest.raises(Refusal) as refusal:
+        refuse_new_failures(environment_for(record_tree), changes)
+    assert str(refusal.value) == (
+        "the change adds 1 FAIL: docs/capabilities.md  points at 'docs/missing.md', which does not exist"
+    )
 
 
 def test_a_substituted_corpus_reads_changed_added_and_deleted_paths(record_tree: Path) -> None:
