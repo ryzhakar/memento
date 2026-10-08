@@ -1,8 +1,8 @@
 """What a record check reads, the corpus, and what it reports, findings."""
 
 import re
-from collections.abc import Callable, Iterable, Iterator
-from dataclasses import dataclass
+from collections.abc import Callable, Iterable, Iterator, Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path, PurePath, PurePosixPath
 from typing import Any, NamedTuple
 
@@ -40,26 +40,45 @@ def normalized(path: str | PurePath) -> str:
 
 @dataclass(frozen=True)
 class Corpus:
-    """The records a check reads: the schema, the tracked paths, and the working tree beneath root."""
+    """The records a check reads: the schema, the tracked paths, and the working tree beneath root with changes over it."""
 
     root: Path
     schema: dict[str, Any]
     tracked: list[str]
+    changes: Mapping[str, str | None] = field(default_factory=dict)
+
+    def substituted(self, changes: Mapping[str, str | None]) -> "Corpus":
+        """This corpus with changed files' texts over the working tree and among the tracked paths, None meaning deleted."""
+        merged = {**self.changes, **{normalized(path): text for path, text in changes.items()}}
+        deleted = {path for path, text in merged.items() if text is None}
+        tracked = sorted((set(self.tracked) - deleted) | (set(merged) - deleted))
+        return replace(self, changes=merged, tracked=tracked)
 
     def text(self, path: str) -> str:
         """The text of a project-relative file."""
+        if path in self.changes:
+            changed = self.changes[path]
+            if changed is None:
+                raise FileNotFoundError(f"{path} is deleted in this corpus")
+            return changed
         return (self.root / path).read_text(encoding="utf-8")
 
     def raw(self, path: str) -> bytes:
         """The bytes of a project-relative file."""
+        if path in self.changes:
+            return self.text(path).encode("utf-8")
         return (self.root / path).read_bytes()
 
     def exists(self, path: str) -> bool:
         """Whether a project-relative path exists in the working tree."""
+        if path in self.changes:
+            return self.changes[path] is not None
         return (self.root / path).exists()
 
     def is_file(self, path: str) -> bool:
         """Whether a project-relative path is a regular file in the working tree."""
+        if path in self.changes:
+            return self.changes[path] is not None
         return (self.root / path).is_file()
 
     def is_dir(self, path: str) -> bool:
@@ -68,7 +87,10 @@ class Corpus:
 
     def glob(self, pattern: str) -> list[str]:
         """The project-relative paths a glob pattern matches, sorted as paths."""
-        return [normalized(path.relative_to(self.root)) for path in sorted(self.root.glob(pattern))]
+        on_disk = {normalized(path.relative_to(self.root)) for path in self.root.glob(pattern)}
+        deleted = {path for path, text in self.changes.items() if text is None}
+        added = {path for path, text in self.changes.items() if text is not None and PurePosixPath(path).full_match(pattern)}
+        return sorted((on_disk - deleted) | added, key=PurePosixPath)
 
     def holds_object(self, revision: str) -> bool:
         """Whether git holds the object a revision names."""

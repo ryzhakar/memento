@@ -23,10 +23,10 @@ class RestoreFailed(Exception):
 
 @dataclass(frozen=True)
 class Staged:
-    """One file's bytes before an act, None when absent, and the bytes the act lands."""
+    """One file's bytes before an act and after it, None meaning the file is absent."""
 
     before: bytes | None
-    after: bytes
+    after: bytes | None
 
 
 @dataclass
@@ -41,9 +41,21 @@ class Act:
         if path not in self.staged:
             working = read_if_present(self.root / path)
             refuse_edited_head_lines(path, working or b"", file_at_head(self.root, path) or b"")
-            self.staged[path] = Staged(before=working, after=working or b"")
-        staged = self.staged[path]
-        self.staged[path] = Staged(before=staged.before, after=staged.after + text.encode("utf-8"))
+            self.staged[path] = Staged(before=working, after=working)
+        self.stage(path, (self.staged[path].after or b"") + text.encode("utf-8"))
+
+    def replace(self, path: str, text: str) -> None:
+        """Stage new whole content for a file, created when absent."""
+        self.stage(path, text.encode("utf-8"))
+
+    def remove(self, path: str) -> None:
+        """Stage a file's deletion."""
+        self.stage(path, None)
+
+    def stage(self, path: str, after: bytes | None) -> None:
+        """Record what a file holds once the act lands, keeping its bytes from before the act's first touch."""
+        before = self.staged[path].before if path in self.staged else read_if_present(self.root / path)
+        self.staged[path] = Staged(before=before, after=after)
 
 
 @dataclass(frozen=True)
@@ -129,11 +141,12 @@ def discard(paths: Iterable[Path]) -> None:
 
 
 def write_temporaries(root: Path, staged: Mapping[str, Staged]) -> dict[str, Path]:
-    """One temporary file per staged write, or none of them when any fails."""
+    """One temporary file per staged write that leaves a file in place, or none of them when any fails."""
     temporaries: dict[str, Path] = {}
     try:
         for path, write in staged.items():
-            temporaries[path] = write_temporary(root / path, write.after)
+            if write.after is not None:
+                temporaries[path] = write_temporary(root / path, write.after)
     except BaseException:
         discard(temporaries.values())
         raise
@@ -153,12 +166,15 @@ def restore(root: Path, befores: Mapping[str, bytes | None]) -> None:
 
 
 def land(root: Path, staged: Mapping[str, Staged], replace_file: Callable[[Path, Path], None]) -> None:
-    """Replace every staged file with its new bytes, or restore every one already replaced and re-raise."""
+    """Replace or delete every staged file, or restore every one already touched and re-raise."""
     temporaries = write_temporaries(root, staged)
     landed: list[str] = []
     try:
-        for path, temporary in temporaries.items():
-            replace_file(temporary, root / path)
+        for path in staged:
+            if path in temporaries:
+                replace_file(temporaries[path], root / path)
+            else:
+                (root / path).unlink(missing_ok=True)
             landed.append(path)
     except BaseException:
         discard(temporary for path, temporary in temporaries.items() if path not in landed)

@@ -82,6 +82,44 @@ def test_a_failed_replacement_removes_a_file_the_act_created(repository: Path) -
     assert leftover_temporaries(repository) == []
 
 
+def test_a_replacement_lands_new_whole_content_over_an_edited_working_copy(repository: Path) -> None:
+    (repository / "kept.md").write_text("edited line\n", encoding="utf-8")
+    with Store(root=repository, replace_file=os.replace).transaction() as act:
+        act.replace("kept.md", "rewritten\nwhole\n")
+    assert (repository / "kept.md").read_bytes() == b"rewritten\nwhole\n"
+
+
+def test_a_replacement_creates_a_file_that_did_not_exist(repository: Path) -> None:
+    with Store(root=repository, replace_file=os.replace).transaction() as act:
+        act.replace("created.md", "created\n")
+    assert (repository / "created.md").read_bytes() == b"created\n"
+
+
+def test_a_removal_deletes_the_file(repository: Path) -> None:
+    with Store(root=repository, replace_file=os.replace).transaction() as act:
+        act.remove("kept.md")
+    assert not (repository / "kept.md").exists()
+
+
+def test_a_failed_replacement_after_a_removal_restores_both_files(repository: Path) -> None:
+    (repository / "other.md").write_bytes(b"other before\n")
+    store = Store(root=repository, replace_file=failing_on_call(1))
+    with pytest.raises(OSError, match="replacement of other.md failed"):
+        with store.transaction() as act:
+            act.remove("kept.md")
+            act.replace("other.md", "other after\n")
+    assert (repository / "kept.md").read_bytes() == b"kept line\n"
+    assert (repository / "other.md").read_bytes() == b"other before\n"
+    assert leftover_temporaries(repository) == []
+
+
+def test_an_append_after_a_replacement_extends_the_replacement(repository: Path) -> None:
+    with Store(root=repository, replace_file=os.replace).transaction() as act:
+        act.replace("kept.md", "fresh\n")
+        act.append("kept.md", "appended\n")
+    assert (repository / "kept.md").read_bytes() == b"fresh\nappended\n"
+
+
 def test_a_refusal_inside_the_transaction_lands_nothing(repository: Path) -> None:
     with pytest.raises(Refusal):
         with Store(root=repository, replace_file=os.replace).transaction() as act:
