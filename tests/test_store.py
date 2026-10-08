@@ -115,12 +115,14 @@ def test_a_second_transaction_waits_for_the_first_to_land(repository: Path) -> N
             second_entered.set()
             act.append("kept.md", "second writer\n")
 
-    writers = [threading.Thread(target=first), threading.Thread(target=second)]
+    writers = [threading.Thread(target=first, daemon=True), threading.Thread(target=second, daemon=True)]
     for writer in writers:
         writer.start()
-    first_holds.wait()
-    assert not second_entered.wait(LOCK_WAIT_SECONDS)
-    release_first.set()
-    for writer in writers:
-        writer.join()
+    try:
+        first_holds.wait()
+        assert not second_entered.wait(LOCK_WAIT_SECONDS)
+    finally:
+        release_first.set()
+        for writer in writers:
+            writer.join()
     assert (repository / "kept.md").read_text(encoding="utf-8") == "kept line\nfirst writer\nsecond writer\n"

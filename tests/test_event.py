@@ -80,6 +80,13 @@ def test_an_event_after_the_span_closed_is_refused(record_tree: Path) -> None:
     assert_refused(record_tree, "no span is open; 'just memento span open <what>'", "self", "decision", "x")
 
 
+def test_an_event_with_no_trace_under_history_is_refused(record_tree: Path) -> None:
+    for trace in (record_tree / HISTORY).glob("*/events.md"):
+        trace.unlink()
+    result = run_memento(record_tree, "trace", "add", "self", "decision", "x")
+    assert (result.exit_code, result.stdout, result.stderr) == (1, "", "refused: no span is open; 'just memento span open <what>'\n")
+
+
 def test_a_span_event_neither_opening_nor_closing_leaves_the_span_open(record_tree: Path) -> None:
     append_to_open_trace(record_tree, "2026-10-01T09:25 | owner | span-event | owner ordered visible re-binding")
     result = run_memento(record_tree, "trace", "add", "self", "decision", "x")
