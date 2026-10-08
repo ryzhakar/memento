@@ -1,6 +1,10 @@
 """`memento check` reports each record defect the ported checks find, one tree per defect."""
 
 import ast
+import os
+import shutil
+import subprocess
+import sys
 from functools import partial
 from pathlib import Path
 
@@ -191,3 +195,32 @@ def defined_check_names() -> set[str]:
 
 def test_every_check_defined_under_memento_is_in_the_check_tuple() -> None:
     assert defined_check_names() == {registered_name(check) for check in CHECKS}
+
+
+def test_the_real_entry_runs_every_check_on_the_tree_it_sits_in(record_tree: Path) -> None:
+    shutil.copytree(PROJECT_ROOT / "memento", record_tree / "memento", ignore=shutil.ignore_patterns("__pycache__"))
+    replace_once(record_tree, "docs/results.md", "2026-10-01", "October")
+    entry = subprocess.run(
+        [sys.executable, "-m", "memento", "check"],
+        cwd=record_tree,
+        capture_output=True,
+        text=True,
+        env=os.environ | {"PYTHONDONTWRITEBYTECODE": "1"},
+        check=False,
+    )
+    finding = "FAIL  docs/results.md:5  date cell 'October' is not YYYY-MM-DD"
+    assert (entry.returncode, entry.stdout) == (1, f"{finding}\nrecords: 1 FAIL, 0 WARN\n")
+
+
+def test_a_wildcard_home_covers_one_segment_only_in_the_maps_coverage_sweep(record_tree: Path) -> None:
+    wildcard_home = "docs/foo/*/bar.md"
+    replace_once(record_tree, ".claude/memento.yaml", "home: docs/reference/\n", f"home: {wildcard_home}\n")
+    replace_once(record_tree, ".claude/memento-map.md", "| docs/reference/ | reference |", f"| {wildcard_home} | reference |")
+    git(record_tree, "rm", "-q", "docs/reference/placeholder.md")
+    for covered_or_not in ("docs/foo/sub/bar.md", "docs/foo/sub/dir/bar.md"):
+        (record_tree / covered_or_not).parent.mkdir(parents=True, exist_ok=True)
+        (record_tree / covered_or_not).write_text("# reference\n", encoding="utf-8")
+        git(record_tree, "add", covered_or_not)
+    assert_single_failure(
+        record_tree, "FAIL  docs/foo/sub/dir/bar.md  not a record the map lists, a declared product, or a retired path"
+    )

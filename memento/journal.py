@@ -217,8 +217,9 @@ def record_event(environment: Environment, actor: str, kind: str, what: str) -> 
     """Append one event line to the open span's events file, returning the file's path and the line."""
     root = environment.store.root
     schema = agreeing_schema(root)
-    line = construct(EventLine, at=environment.now(), actor=parse_actor(actor), kind=event_kind(kind), what=what)
+    author, event = parse_actor(actor), event_kind(kind)
     with environment.store.transaction() as act:
+        line = construct(EventLine, at=environment.now(), actor=author, kind=event, what=what)
         events_file = newest_events_file(root, schema)
         events_text = (root / events_file).read_text(encoding="utf-8")
         refuse_closed_span(events_text)

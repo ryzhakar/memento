@@ -1,6 +1,5 @@
 """Living records, corrected in place: charter, map, conventions and results."""
 
-import fnmatch
 import re
 from collections.abc import Iterator
 
@@ -8,7 +7,7 @@ import typer
 
 from memento.findings import DATE, SHA, Corpus, Finding, fail
 from memento.pointers import ground_findings, home_of
-from memento.schema import DATE_PLACEHOLDER, SCHEMA_HOME
+from memento.schema import SCHEMA_HOME, home_pattern
 
 directive_group = typer.Typer(no_args_is_help=True, help="Conventions: add, replace or drop a rule.")
 results_group = typer.Typer(no_args_is_help=True, help="Results: add, replace or drop a contender's row.")
@@ -33,7 +32,6 @@ JOURNAL_SPACE_ROOT = "docs/orchestration_log/"
 CONFIG_SPACE_ROOT = ".claude/"
 TEMPLATE_HOME_MARKS = "{*"
 DIRECTORY_MARK = "/"
-ISO_DATE_GLOB = "[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]"
 
 
 def in_record_space(path: str) -> bool:
@@ -42,14 +40,6 @@ def in_record_space(path: str) -> bool:
     at_root = DIRECTORY_MARK not in path and path.endswith(".md")
     in_config = path.startswith(CONFIG_SPACE_ROOT) and path.count(DIRECTORY_MARK) == 1
     return in_docs or at_root or in_config
-
-
-def home_covers(home: str, path: str) -> bool:
-    """Whether a home, read as a glob with `{date}` an ISO date, covers a path."""
-    pattern = home.replace(DATE_PLACEHOLDER, ISO_DATE_GLOB)
-    if home.endswith(DIRECTORY_MARK):
-        return fnmatch.fnmatch(path, pattern + "*")
-    return fnmatch.fnmatch(path, pattern)
 
 
 def map_rows(corpus: Corpus, map_path: str) -> list[tuple[int, str, str, str, str]]:
@@ -90,7 +80,7 @@ def check_map(corpus: Corpus) -> Iterator[Finding]:
     for path in corpus.tracked:
         if not in_record_space(path):
             continue
-        covered = any(home_covers(home, path) for home in homes)
+        covered = any(home_pattern(home).fullmatch(path) for home in homes)
         covered = covered or any(path == product or (product.endswith(DIRECTORY_MARK) and path.startswith(product)) for product in products)
         if not covered and path not in retired:
             yield fail(path, "not a record the map lists, a declared product, or a retired path")

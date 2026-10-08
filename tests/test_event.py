@@ -1,10 +1,16 @@
 """`memento events add` appends one event line to the open span's events file, or refuses and lands nothing."""
 
+import fcntl
+import os
 from datetime import datetime
 from pathlib import Path
 
 import pytest
+from typer.testing import CliRunner
 
+from memento import Environment
+from memento.__main__ import CHECKS, app
+from memento.store import Store
 from tests.memento.conftest import FIXED_NOW, HISTORY, git, replace_once, run_memento
 
 OPEN_EVENTS_FILE = f"{HISTORY}/2026-10-01/events.md"
@@ -140,3 +146,27 @@ def test_a_schema_declaring_a_kind_memento_does_not_know_is_refused(record_tree:
     assert (result.exit_code, result.stdout) == (1, "")
     assert result.stderr.startswith("refused: schema declares kinds ['ledger', 'charter',")
     assert result.stderr.endswith("; amend the module with the schema\n")
+
+
+def record_lock_held_elsewhere(root: Path) -> bool:
+    """Whether the record lock is held, probed by trying to take it without waiting."""
+    with (root / ".git/memento.lock").open("a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        fcntl.flock(handle, fcntl.LOCK_UN)
+        return False
+
+
+def test_the_clock_is_read_while_the_record_lock_is_held(record_tree: Path) -> None:
+    observed: list[bool] = []
+
+    def clock_probing_the_lock() -> datetime:
+        """The fixed time, after noting whether the record lock is held at the moment of reading."""
+        observed.append(record_lock_held_elsewhere(record_tree))
+        return FIXED_NOW
+
+    environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=clock_probing_the_lock, checks=CHECKS)
+    result = CliRunner().invoke(app, ["events", "add", "self", "decision", "x"], obj=environment)
+    assert (result.exit_code, observed) == (0, [True])
