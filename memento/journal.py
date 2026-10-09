@@ -1,209 +1,83 @@
-"""The journal, appended and never edited: events files, close blocks and failures."""
+"""The journal's verbs: open and add to a span's events, add to and close its narrative, record its failures."""
 
-import re
-from collections.abc import Iterator
-from datetime import datetime
-from pathlib import Path, PurePosixPath
-from typing import Annotated, cast
+from pathlib import Path
 
 import typer
-from pydantic import AfterValidator, BaseModel, ConfigDict
+from pydantic import TypeAdapter, ValidationError
 
 from memento import Environment, Refusal, construct, refusals_reported
-from memento.actor import Actor, parse_actor
+from memento.actor import Self_, parse_actor
 from memento.clock import minute
-from memento.findings import MINUTE, SHA, Corpus, Finding, fail, split_entries
-from memento.schema import (
-    DATE_PLACEHOLDER,
-    SEGMENT_WILDCARD,
-    EVENT_KINDS,
-    EVENTS_KIND,
-    EventKind,
-    Schema,
-    agreeing_schema,
-    kind_for,
-    events_home,
+from memento.findings import split_entries
+from memento.journal_git import found_head
+from memento.journal_shapes import (
+    CHANGE_EVENT,
+    CLOSE_HEADER,
+    ENTRY_HEADING,
+    FAILURE_EVENT,
+    HEAD_LABEL,
+    LABEL_MARK,
+    LONGEST_CLOSE_LABEL,
+    NEWLINE,
+    NEXT_LABEL,
+    SPAN_EVENT,
+    CloseBlock,
+    EventLine,
+    FailureEntry,
+    Paragraph,
+    close_label_width_shortfall,
+    close_labels_disagreement,
+    failure_labels_disagreement,
+    state_overrun,
 )
+from memento.journal_spans import (
+    SPAN_CLOSING,
+    SPAN_MARK_END,
+    SPAN_OPENING,
+    events_file_for,
+    events_tail,
+    failures_file_for,
+    newest_close_block,
+    newest_events_file,
+    open_since,
+    open_span_events,
+    session_file_for,
+    span_day,
+)
+from memento.schema import EVENT_KINDS, EventKind, agreeing_schema, load_corpus, load_schema
+
 
 events_group = typer.Typer(no_args_is_help=True, help="Events: open a span, add a line to its events file, tail it.")
 failure_group = typer.Typer(no_args_is_help=True, help="Failures: an entry together with its events line.")
 digest_group = typer.Typer(no_args_is_help=True, help="The span's narrative: add a paragraph, close the span, print the newest close block.")
 
 ROUTED_ELSEWHERE = {
-    "span-event": "span-event lines are written by 'just memento events open' or 'just memento digest close'",
-    "failure": "a failure is written by 'just memento failure add', which writes its entry and its events line together",
-    "change": "change goes to the change log: 'just memento change add'",
+    SPAN_EVENT: f"{SPAN_EVENT} lines are written by 'just memento events open' or 'just memento digest close'",
+    FAILURE_EVENT: f"a {FAILURE_EVENT} is written by 'just memento failure add', which writes its entry and its events line together",
+    CHANGE_EVENT: f"{CHANGE_EVENT} goes to the change log: 'just memento change add'",
 }
-NO_OPEN_SPAN = "no span is open; 'just memento events open <what>'"
-SPAN_EVENT = "span-event"
-SPAN_OPENING = "open"
-SPAN_CLOSING = "close"
-EVENT_FIELD_SEPARATOR = " | "
-EVENT_FIELDS = 4
-KIND_FIELD = 2
-WHAT_FIELD = 3
 MINUTE_WIDTH = len("YYYY-MM-DDTHH:MM")
-VISIBLE_START = re.compile(r"\S")
-
-RATIFIED_ON = "2026-09-23"
-JOURNAL_FILE_PATTERNS = ["session*.md", "events*.md", "failures.md"]
-HISTORY_GLOB = "docs/orchestration_log/history/*"
-CLOSE_HEADING = "## Close"
-CLOSE_HEADER = re.compile(rf"## Close — {MINUTE}")
-SPAN_CLOSE_LINE = re.compile(r" \| span-event \| close")
-FAILURE_LINE = " | failure | "
-STATE_LABEL = "state"
-HEAD_LABEL = "HEAD"
-QUOTED_LINE_WIDTH = 60
+CLOCK_TIME_START = len("YYYY-MM-DDT")
+SESSION_TITLE = "# {day}\n"
+FAILURES_TITLE = "# {day} — failures\n"
+AFTER_CLOSE_HEADING = "## After the {time} close\n"
+EVENT_KIND_ADAPTER = TypeAdapter(EventKind)
 
 
-def written_after_ratification(corpus: Corpus, pattern: str) -> list[str]:
-    """Journal files the current formats govern; those standing at ratification keep the shape they had."""
-    return [path for path in corpus.glob(f"{HISTORY_GLOB}/{pattern}") if PurePosixPath(path).parent.name > RATIFIED_ON]
-
-
-def event_line_shape(schema: Schema) -> re.Pattern[str]:
-    """The shape every events line takes: minute, actor, an event kind the schema declares, and what."""
-    kinds = "|".join(re.escape(kind) for kind in schema["events"])
-    return re.compile(rf"^(?P<minute>{MINUTE}) \| (owner|self|agent:[\w.-]+|tool:[\w.-]+) \| ({kinds}) \| \S")
-
-
-def check_event_lines(corpus: Corpus) -> Iterator[Finding]:
-    """Fail events files misdated at their first line, lines off the events shape, and time running backwards."""
-    line_shape = event_line_shape(corpus.schema)
-    for path in written_after_ratification(corpus, "events*.md"):
-        day = PurePosixPath(path).parent.name
-        lines = corpus.text(path).splitlines()
-        if lines and not lines[0].startswith(day):
-            yield fail(f"{path}:1", f"first line is not dated {day}, the date naming the file")
-        previous = ""
-        for number, line in enumerate(lines, 1):
-            shape = line_shape.match(line)
-            if not shape:
-                yield fail(f"{path}:{number}", "not 'YYYY-MM-DDTHH:MM | actor | kind | what'")
-                continue
-            if shape["minute"] < previous:
-                yield fail(f"{path}:{number}", f"time {shape['minute']} goes back from {previous}")
-            previous = max(previous, shape["minute"])
-
-
-def close_block_findings(corpus: Corpus, path: str) -> Iterator[Finding]:
-    """Fail each close block of a session record that breaks the schema's close shape."""
-    spec = corpus.schema["kinds"]["digest"]
-    labels, width = spec["close_labels"], spec["close_label_width"]
-    for line_number, header, body in split_entries(corpus.text(path)):
-        if not header.startswith(CLOSE_HEADING):
-            continue
-        where = f"{path}:{line_number}"
-        if not CLOSE_HEADER.fullmatch(header):
-            yield fail(where, "close header is not '## Close — YYYY-MM-DDTHH:MM'")
-        found: list[tuple[str, int]] = []
-        for line in (line for line in body if line.strip()):
-            label = line[:width].strip()
-            if label in labels and line[:width] == label.ljust(width):
-                found.append((label, 1))
-            elif line.startswith(" " * width) and found:
-                found[-1] = (found[-1][0], found[-1][1] + 1)
-            else:
-                yield fail(where, f"line outside the close fields: {line[:QUOTED_LINE_WIDTH]!r}")
-        if [label for label, _ in found] != labels:
-            yield fail(where, f"close fields {[label for label, _ in found]} are not {labels}")
-        for label, count in found:
-            if label == STATE_LABEL and count > spec["state_max_lines"]:
-                yield fail(where, f"state runs {count} lines, over {spec['state_max_lines']}")
-        head_line = next((line for line in body if line.startswith(HEAD_LABEL)), "")
-        if not SHA.match(head_line[width:]):
-            yield fail(where, "HEAD does not start with a commit SHA")
-
-
-def check_close_blocks(corpus: Corpus) -> Iterator[Finding]:
-    """Fail close blocks breaking the close shape in every session record written after ratification."""
-    for path in written_after_ratification(corpus, "session*.md"):
-        yield from close_block_findings(corpus, path)
-
-
-def check_failures(corpus: Corpus) -> Iterator[Finding]:
-    """Fail failure entries missing their labelled paragraphs, and failure files outnumbering their events file's failure lines."""
-    labels = corpus.schema["kinds"]["failure"]["entry_labels"]
-    for path in written_after_ratification(corpus, "failures.md"):
-        entries = list(split_entries(corpus.text(path)))
-        for line_number, _header, body in entries:
-            openings = [label for line in body for label in labels if line.startswith(f"{label}:")]
-            if openings != labels:
-                yield fail(f"{path}:{line_number}", f"paragraphs open {openings}, not {labels}")
-        events_file = str(PurePosixPath(path).parent / "events.md")
-        pointers = sum(FAILURE_LINE in line for line in corpus.text(events_file).splitlines()) if corpus.exists(events_file) else 0
-        if pointers < len(entries):
-            yield fail(path, f"{len(entries)} entries but {pointers} failure lines in {events_file}")
-
-
-def check_spans_closed_in_digest(corpus: Corpus) -> Iterator[Finding]:
-    """Fail events files recording more span closes than their session record holds close blocks."""
-    for events_file in written_after_ratification(corpus, "events*.md"):
-        closes = sum(SPAN_CLOSE_LINE.search(line) is not None for line in corpus.text(events_file).splitlines())
-        events_path = PurePosixPath(events_file)
-        digest = str(events_path.parent / events_path.name.replace("events", "session"))
-        blocks = sum(line.startswith(CLOSE_HEADING) for line in corpus.text(digest).splitlines()) if corpus.exists(digest) else 0
-        if closes > blocks:
-            yield fail(events_file, f"{closes} span closes but {blocks} close blocks in {digest}")
-
-
-def visible_single_line(text: str) -> str:
-    """Admit an event's what as one line opening on a visible character."""
-    if not VISIBLE_START.match(text):
-        raise ValueError("what must start with a visible character")
-    if text.splitlines() != [text]:
-        raise ValueError("what is one line; it carries a line break")
-    return text
-
-
-type What = Annotated[str, AfterValidator(visible_single_line)]
-
-
-class EventLine(BaseModel):
-    """One event as the events file records it: when, who, which kind, and what."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
-    at: datetime
-    actor: Actor
-    kind: EventKind
-    what: What
-
-    def render(self) -> str:
-        """The line as the events file holds it."""
-        return EVENT_FIELD_SEPARATOR.join([minute(self.at), self.actor.render(), self.kind, self.what])
+def refuse_disagreement(disagreement: str | None) -> None:
+    """Refuse a write while the schema and memento disagree on the record's structure."""
+    if disagreement is not None:
+        raise Refusal(disagreement)
 
 
 def event_kind(text: str) -> EventKind:
     """The event kind a kind argument names, refusing the kinds other verbs write."""
     if text in ROUTED_ELSEWHERE:
         raise Refusal(ROUTED_ELSEWHERE[text])
-    if text not in EVENT_KINDS:
-        raise Refusal(f"'{text}' is not an event kind ({', '.join(EVENT_KINDS)})")
-    return cast(EventKind, text)
-
-
-def newest_events_file(root: Path, schema: Schema) -> str:
-    """The newest span's events file, the unsuffixed one under the latest date, refusing when no span has one."""
-    unsuffixed = events_home(schema).replace(SEGMENT_WILDCARD, "")
-    found = (str(path.relative_to(root)) for path in root.glob(unsuffixed.replace(DATE_PLACEHOLDER, SEGMENT_WILDCARD)))
-    events_files = sorted(path for path in found if kind_for(schema, path) == EVENTS_KIND)
-    if not events_files:
-        raise Refusal(NO_OPEN_SPAN)
-    return events_files[-1]
-
-
-def kinds_and_whats(events_text: str) -> list[tuple[str, str]]:
-    """The kind and the what of every line of an events file that has all four fields."""
-    split = (line.split(EVENT_FIELD_SEPARATOR, EVENT_FIELDS - 1) for line in events_text.splitlines())
-    return [(fields[KIND_FIELD], fields[WHAT_FIELD]) for fields in split if len(fields) == EVENT_FIELDS]
-
-
-def refuse_closed_span(events_text: str) -> None:
-    """Refuse when the events file's last span-event that opens or closes a span closes it."""
-    markers = [what for kind, what in kinds_and_whats(events_text) if kind == SPAN_EVENT and what.startswith((SPAN_OPENING, SPAN_CLOSING))]
-    if not markers or not markers[-1].startswith(SPAN_OPENING):
-        raise Refusal(NO_OPEN_SPAN)
+    try:
+        return EVENT_KIND_ADAPTER.validate_python(text)
+    except ValidationError as unknown:
+        raise Refusal(f"'{text}' is not an event kind ({', '.join(EVENT_KINDS)})") from unknown
 
 
 def refuse_clock_behind(stamp: str, events_text: str) -> None:
@@ -213,6 +87,16 @@ def refuse_clock_behind(stamp: str, events_text: str) -> None:
         raise Refusal(f"the clock reads {stamp}, before the events file's last line at {lines[-1][:MINUTE_WIDTH]}")
 
 
+def text_if_present(root: Path, path: str) -> str | None:
+    """A record's text, or None when it does not exist."""
+    return (root / path).read_text(encoding="utf-8") if (root / path).exists() else None
+
+
+def written_lines(path: str, text: str) -> list[str]:
+    """What a verb prints for text it wrote to a path: one '<path>: <line>' per line that is not blank."""
+    return [f"{path}: {line}" for line in text.splitlines() if line.strip()]
+
+
 def record_event(environment: Environment, actor: str, kind: str, what: str) -> tuple[str, str]:
     """Append one event line to the open span's events file, returning the file's path and the line."""
     root = environment.store.root
@@ -220,12 +104,10 @@ def record_event(environment: Environment, actor: str, kind: str, what: str) -> 
     author, event = parse_actor(actor), event_kind(kind)
     with environment.store.transaction() as act:
         line = construct(EventLine, at=environment.now(), actor=author, kind=event, what=what)
-        events_file = newest_events_file(root, schema)
-        events_text = (root / events_file).read_text(encoding="utf-8")
-        refuse_closed_span(events_text)
-        refuse_clock_behind(minute(line.at), events_text)
-        act.append(events_file, line.render() + "\n")
-    return events_file, line.render()
+        span = open_span_events(root, schema)
+        refuse_clock_behind(minute(line.at), span.text)
+        act.append(span.events_file, line.render() + NEWLINE)
+    return span.events_file, line.render()
 
 
 @events_group.command(
@@ -249,3 +131,239 @@ def add(
     with refusals_reported():
         events_file, line = record_event(ctx.obj, actor, kind, " ".join(what))
     typer.echo(f"{events_file}: {line}")
+
+
+def refuse_open_span(events_file: str, events_text: str) -> None:
+    """Refuse opening a span while the newest one is open."""
+    since = open_since(events_text)
+    if since is not None:
+        raise Refusal(f"span {span_day(events_file)} is open since {since}; resume it or close it")
+
+
+def open_span(environment: Environment, what: str) -> tuple[str, str]:
+    """Append a span-opening line to today's events file, returning the file's path and the line."""
+    root = environment.store.root
+    schema = agreeing_schema(root)
+    with environment.store.transaction() as act:
+        line = construct(EventLine, at=environment.now(), actor=Self_(), kind=SPAN_EVENT, what=f"{SPAN_OPENING}{SPAN_MARK_END} {what}")
+        newest = newest_events_file(root, schema)
+        if newest is not None:
+            newest_text = (root / newest).read_text(encoding="utf-8")
+            refuse_open_span(newest, newest_text)
+            refuse_clock_behind(minute(line.at), newest_text)
+        events_file = events_file_for(schema, line.at.date().isoformat())
+        act.append(events_file, line.render() + NEWLINE)
+    return events_file, line.render()
+
+
+@events_group.command(
+    "open",
+    help=(
+        "Open a span: append '<minute> | self | span-event | open; <what>' to today's events file "
+        "(docs/orchestration_log/history/<today>/events.md), created with its directory when absent, stamped by the clock. "
+        "Reads .claude/memento.yaml and the newest events file; prints '<events file>: <line>'. Refuses: the newest span "
+        "still open; a what that is not one line; a clock behind the newest events file's last line; a worktree; "
+        "an events file whose working copy edits a line HEAD holds; a schema whose structure memento does not know."
+    ),
+)
+def open_(
+    ctx: typer.Context,
+    what: list[str] = typer.Argument(..., help="What the span opens on; several words are joined by single spaces."),
+) -> None:
+    """Open a span in today's events file."""
+    with refusals_reported():
+        events_file, line = open_span(ctx.obj, " ".join(what))
+    typer.echo(f"{events_file}: {line}")
+
+
+@events_group.command(
+    "tail",
+    help=(
+        "Print the newest span's events file (docs/orchestration_log/history/<span date>/events.md), open or closed, "
+        "from its last span-event line to its end. Reads .claude/memento.yaml and that file; prints nothing when no "
+        "events file exists. Writes nothing and refuses nothing."
+    ),
+)
+def tail(ctx: typer.Context) -> None:
+    """Print the newest span's events from its last span-event line."""
+    environment: Environment = ctx.obj
+    root = environment.store.root
+    events_file = newest_events_file(root, load_schema(root))
+    typer.echo(events_tail((root / events_file).read_text(encoding="utf-8")) if events_file else "", nl=False)
+
+
+def last_close_minute(session_text: str) -> str | None:
+    """The minute of the close block a session record ends in, or None when its last entry is no close block."""
+    headers = [header for _line_number, header, _body in split_entries(session_text)]
+    stamp = CLOSE_HEADER.fullmatch(headers[-1]) if headers else None
+    return stamp["minute"] if stamp else None
+
+
+def session_lead(session_text: str | None, day: str) -> str:
+    """What precedes new narrative in a session record: its title when absent, a heading when it ends in a close block."""
+    if session_text is None:
+        return SESSION_TITLE.format(day=day)
+    closed_at = last_close_minute(session_text)
+    return NEWLINE + AFTER_CLOSE_HEADING.format(time=closed_at[CLOCK_TIME_START:]) if closed_at else ""
+
+
+def add_paragraphs(environment: Environment, texts: list[str]) -> tuple[str, str]:
+    """Append each text as one paragraph to the open span's session record, returning the record's path and the text added."""
+    root = environment.store.root
+    schema = agreeing_schema(root)
+    paragraphs = [construct(Paragraph, text=text) for text in texts]
+    with environment.store.transaction() as act:
+        events_file = open_span_events(root, schema).events_file
+        session = session_file_for(events_file)
+        added = session_lead(text_if_present(root, session), span_day(events_file))
+        added += "".join(NEWLINE + paragraph.render() for paragraph in paragraphs)
+        act.append(session, added)
+    return session, added
+
+
+@digest_group.command(
+    "add",
+    help=(
+        "Append each argument as one paragraph to the open span's session record "
+        "(docs/orchestration_log/history/<span date>/session.md), created under a '# <span date>' title when absent; "
+        "narrative after a close block opens under '## After the <HH:MM> close'. Reads .claude/memento.yaml, the open "
+        "span's events file and its session record; prints '<session record>: <line>' per line written. Refuses: an "
+        "argument holding a line break, empty or starting with a blank; an argument starting '## '; no open span; "
+        "a worktree; a session record whose working copy edits a line HEAD holds."
+    ),
+)
+def add_paragraph(
+    ctx: typer.Context,
+    paragraphs: list[str] = typer.Argument(..., help="One paragraph per argument, each one line."),
+) -> None:
+    """Append paragraphs to the open span's session record."""
+    with refusals_reported():
+        session, added = add_paragraphs(ctx.obj, paragraphs)
+    typer.echo(NEWLINE.join(written_lines(session, added)))
+
+
+def refuse_multiline_next(next_step: str) -> None:
+    """Refuse a next step the span's close line cannot carry on one line."""
+    if NEWLINE in next_step:
+        raise Refusal("next is one line; the span's close line in the events file carries it")
+
+
+def close_span(environment: Environment, state: str, open_items: str, next_step: str) -> list[tuple[str, str]]:
+    """Append a close block to the open span's session record and its close line to its events file, in one act."""
+    root = environment.store.root
+    schema = agreeing_schema(root)
+    spec = schema["kinds"]["digest"]
+    refuse_disagreement(close_labels_disagreement(schema))
+    refuse_disagreement(close_label_width_shortfall(schema))
+    refuse_multiline_next(next_step)
+    with environment.store.transaction() as act:
+        events_file, events_text = open_span_events(root, schema)
+        at = environment.now()
+        head = found_head(environment.run_git, root)
+        block = construct(CloseBlock, at=at, head=head, state=state, open_items=open_items, next_step=next_step)
+        overrun = state_overrun(block, spec["state_max_lines"])
+        if overrun is not None:
+            raise Refusal(overrun)
+        what = f"{SPAN_CLOSING}{SPAN_MARK_END} {HEAD_LABEL} {head.render()}{SPAN_MARK_END} {NEXT_LABEL}{LABEL_MARK} {next_step}"
+        line = construct(EventLine, at=at, actor=Self_(), kind=SPAN_EVENT, what=what)
+        refuse_clock_behind(minute(at), events_text)
+        session = session_file_for(events_file)
+        session_text = text_if_present(root, session)
+        block_text = (SESSION_TITLE.format(day=span_day(events_file)) if session_text is None else "") + NEWLINE + block.render(spec["close_label_width"])
+        act.append(session, block_text)
+        act.append(events_file, line.render() + NEWLINE)
+    return [(session, block_text), (events_file, line.render())]
+
+
+@digest_group.command(
+    "close",
+    help=(
+        "Close the open span: append a close block '## Close — <minute>' with HEAD, state, open and next to its session "
+        "record (docs/orchestration_log/history/<span date>/session.md, created under a '# <span date>' title when absent) "
+        "and '<minute> | self | span-event | close; HEAD <head>; next: <next>' to its events file, in one act. HEAD is "
+        "'<short sha> (clean)' or '<short sha> (dirty: <paths>)' from git status. A field's lines are separated by "
+        "newlines. Reads .claude/memento.yaml, git, the events file and the session record; prints '<path>: <line>' per "
+        "line written. Refuses: no open span; a HEAD naming no commit; a state over the schema's state_max_lines (3); an empty field; a field line "
+        "starting with a blank; a next of more than one line; a changed path whose name holds ', '; a clock behind the "
+        "events file's last line; a worktree; "
+        "a file whose working copy edits a line HEAD holds; a schema whose structure or close labels memento does not know; "
+        f"a schema close_label_width under {len(LONGEST_CLOSE_LABEL)}, the length of the longest close label '{LONGEST_CLOSE_LABEL}'."
+    ),
+)
+def close(
+    ctx: typer.Context,
+    state: str = typer.Argument(..., help="Where the work stands, at most three lines."),
+    open: str = typer.Argument(..., help="Waits, tripwires and delegations left open, or 'none'."),
+    next: str = typer.Argument(..., help="The first step of the next span, one line."),
+) -> None:
+    """Close the open span with its close block and close line."""
+    with refusals_reported():
+        written = close_span(ctx.obj, state, open, next)
+    typer.echo(NEWLINE.join(line for path, text in written for line in written_lines(path, text)))
+
+
+@digest_group.command(
+    "baseline",
+    help=(
+        "Print the newest close block across every docs/orchestration_log/history/<date>/session*.md, as the record "
+        "holds it: the one under the latest span date, then with the latest minute, then the later in its record. "
+        "Prints nothing when no close block exists. Writes nothing and refuses nothing."
+    ),
+)
+def baseline(ctx: typer.Context) -> None:
+    """Print the newest close block."""
+    environment: Environment = ctx.obj
+    closed = newest_close_block(load_corpus(environment.store.root))
+    typer.echo(closed.text if closed else "", nl=False)
+
+
+def refuse_repeated_title(failures_file: str, failures_text: str | None, title: str) -> None:
+    """Refuse a failure whose title an entry in the failures file already carries."""
+    headers = [header for _line_number, header, _body in split_entries(failures_text or "")]
+    if f"{ENTRY_HEADING}{title}" in headers:
+        raise Refusal(f"failure '{title}' is already in {failures_file}")
+
+
+def add_failure(environment: Environment, title: str, what_happened: str, mechanism: str, correction: str) -> list[tuple[str, str]]:
+    """Append a failure entry to the open span's failures file and its failure line to its events file, in one act."""
+    root = environment.store.root
+    schema = agreeing_schema(root)
+    refuse_disagreement(failure_labels_disagreement(schema))
+    entry = construct(FailureEntry, title=title, what_happened=what_happened, mechanism=mechanism, correction=correction)
+    with environment.store.transaction() as act:
+        events_file, events_text = open_span_events(root, schema)
+        day = span_day(events_file)
+        failures_file = failures_file_for(schema, day)
+        failures_text = text_if_present(root, failures_file)
+        refuse_repeated_title(failures_file, failures_text, title)
+        line = construct(EventLine, at=environment.now(), actor=Self_(), kind=FAILURE_EVENT, what=title)
+        refuse_clock_behind(minute(line.at), events_text)
+        entry_added = (FAILURES_TITLE.format(day=day) if failures_text is None else "") + NEWLINE + entry.render()
+        act.append(failures_file, entry_added)
+        act.append(events_file, line.render() + NEWLINE)
+    return [(failures_file, entry_added), (events_file, line.render())]
+
+
+@failure_group.command(
+    "add",
+    help=(
+        "Append a failure entry '## <title>' with its 'What happened:', 'Mechanism:' and 'Correction:' paragraphs to "
+        "the open span's failures file (docs/orchestration_log/history/<span date>/failures.md, created under a "
+        "'# <span date> — failures' title when absent) and '<minute> | self | failure | <title>' to its events file, in "
+        "one act. Reads .claude/memento.yaml, the events file and the failures file; prints '<path>: <line>' per line "
+        "written. Refuses: a part that is empty, more than one line, or starting with a blank; a title already in the "
+        "failures file; no open span; a clock behind the events file's last line; a worktree; a file whose working copy "
+        "edits a line HEAD holds; a schema whose structure or failure labels memento does not know."
+    ),
+)
+def add_failure_entry(
+    ctx: typer.Context,
+    title: str = typer.Argument(..., help="The failure's title, one line."),
+    what_happened: str = typer.Argument(..., help="What happened, one line."),
+    mechanism: str = typer.Argument(..., help="The mechanism behind it, one line."),
+    correction: str = typer.Argument(..., help="The correction, one line."),
+) -> None:
+    """Append a failure entry and its events line."""
+    with refusals_reported():
+        written = add_failure(ctx.obj, title, what_happened, mechanism, correction)
+    typer.echo(NEWLINE.join(line for path, text in written for line in written_lines(path, text)))

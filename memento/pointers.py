@@ -6,7 +6,7 @@ from collections.abc import Iterator
 from pathlib import PurePosixPath
 
 from memento.findings import DATE, SHA, Corpus, Finding, fail, normalized
-from memento.journal import JOURNAL_FILE_PATTERNS, RATIFIED_ON
+from memento.journal_spans import JOURNAL_FILE_PATTERNS, RATIFIED_ON
 
 ORCHESTRATION = "docs/orchestration_log"
 LIVING_KINDS = ["charter", "frame", "directive", "fact", "results", "map", "schema"]

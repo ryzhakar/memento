@@ -10,6 +10,7 @@ from typer.testing import CliRunner
 
 from memento import Environment
 from memento.__main__ import CHECKS, app
+from memento.git import git_exit_status
 from memento.store import Store
 from tests.memento.conftest import FIXED_NOW, HISTORY, git, replace_once, run_memento
 
@@ -167,6 +168,6 @@ def test_the_clock_is_read_while_the_record_lock_is_held(record_tree: Path) -> N
         observed.append(record_lock_held_elsewhere(record_tree))
         return FIXED_NOW
 
-    environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=clock_probing_the_lock, checks=CHECKS)
+    environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=clock_probing_the_lock, checks=CHECKS, run_git=git_exit_status)
     result = CliRunner().invoke(app, ["events", "add", "self", "decision", "x"], obj=environment)
     assert (result.exit_code, observed) == (0, [True])

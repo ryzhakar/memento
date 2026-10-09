@@ -1,5 +1,6 @@
 """Landing record writes: in the root checkout only, under the record lock, all of an act or none of it."""
 
+import contextlib
 import fcntl
 import os
 import stat
@@ -7,7 +8,7 @@ import tempfile
 from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from memento import Refusal
 from memento.git import file_at_head, is_worktree
@@ -49,7 +50,7 @@ class Act:
         if path in self.staged:
             base = self.staged[path].after or b""
         else:
-            base = read_if_present(self.root / path) or b""
+            base = bytes_if_present(self.root / path) or b""
             refuse_edited_head_lines(path, base, file_at_head(self.root, path) or b"")
         self.stage(path, base + text.encode("utf-8"))
 
@@ -100,7 +101,7 @@ def record_lock(root: Path) -> Iterator[None]:
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def read_if_present(path: Path) -> bytes | None:
+def bytes_if_present(path: Path) -> bytes | None:
     """A file's bytes, or None when it does not exist."""
     return path.read_bytes() if path.exists() else None
 
@@ -134,9 +135,10 @@ def mode_for(target: Path) -> int:
 def write_temporary(target: Path, content: bytes) -> Path:
     """Write content durably to a new temporary file beside target, carrying target's permission bits."""
     descriptor, name = tempfile.mkstemp(dir=target.parent, prefix=f".{target.name}.", suffix=TEMPORARY_SUFFIX)
+    os.close(descriptor)
     temporary = Path(name)
     try:
-        with os.fdopen(descriptor, "wb") as handle:
+        with temporary.open("wb") as handle:
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
@@ -166,20 +168,54 @@ def write_temporaries(root: Path, staged: Mapping[str, Staged]) -> dict[str, Pat
     return temporaries
 
 
+def put_back(target: Path, before: Snapshot | None) -> None:
+    """Return one file to its bytes and permission bits before the act, or remove it when it did not exist."""
+    if before is None:
+        target.unlink(missing_ok=True)
+    else:
+        target.write_bytes(before.content)
+        target.chmod(before.mode)
+
+
 def restore(root: Path, befores: Mapping[str, Snapshot | None]) -> None:
-    """Put each landed file back to its bytes and permission bits before the act, and verify every one."""
+    """Try to put back every landed file, then verify every one, raising RestoreFailed naming those left differing."""
     for path, before in befores.items():
-        if before is None:
-            (root / path).unlink(missing_ok=True)
-        else:
-            (root / path).write_bytes(before.content)
-            (root / path).chmod(before.mode)
+        with contextlib.suppress(OSError):
+            put_back(root / path, before)
     differing = [path for path, before in befores.items() if snapshot_if_present(root / path) != before]
     if differing:
         raise RestoreFailed(f"rollback left {', '.join(differing)} differing from its bytes or permission bits before the act")
 
 
+def missing_directories(root: Path, staged: Mapping[str, Staged]) -> list[Path]:
+    """Every directory a staged write needs that does not exist yet, each listed before the directories inside it."""
+    needed = (root / directory for path, write in staged.items() if write.after is not None for directory in reversed(PurePosixPath(path).parents))
+    return list(dict.fromkeys(directory for directory in needed if not directory.is_dir()))
+
+
+def remove_directories(directories: Iterable[Path]) -> None:
+    """Remove directories an act created, innermost first, raising RestoreFailed when one cannot be removed."""
+    for directory in reversed(list(directories)):
+        try:
+            directory.rmdir()
+        except OSError as left:
+            raise RestoreFailed(f"rollback left directory {directory} it created") from left
+
+
 def land(root: Path, staged: Mapping[str, Staged], replace_file: Callable[[Path, Path], None]) -> None:
+    """Create the directories staged writes need and land every file, or remove the directories created and re-raise."""
+    created: list[Path] = []
+    try:
+        for directory in missing_directories(root, staged):
+            directory.mkdir()
+            created.append(directory)
+        land_files(root, staged, replace_file)
+    except BaseException:
+        remove_directories(created)
+        raise
+
+
+def land_files(root: Path, staged: Mapping[str, Staged], replace_file: Callable[[Path, Path], None]) -> None:
     """Replace or delete every staged file, or restore every one already touched and re-raise."""
     temporaries = write_temporaries(root, staged)
     landed: list[str] = []

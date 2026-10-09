@@ -13,6 +13,7 @@ from typer.testing import CliRunner
 from memento import Environment
 from memento.__main__ import CHECKS, app
 from memento.findings import Check
+from memento.git import git_exit_status
 from memento.store import Store
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -212,9 +213,16 @@ def replace_once(root: Path, path: str, old: str, new: str) -> None:
     target.write_text(text.replace(old, new), encoding="utf-8")
 
 
+def commit_tree(root: Path, message: str) -> str:
+    """Commit every change in the tree, returning the commit's sha."""
+    git(root, "add", "-A")
+    git(root, "commit", "-q", "-m", message)
+    return git(root, "rev-parse", "HEAD").strip()
+
+
 def run_memento(root: Path, *args: str, now: datetime = FIXED_NOW, checks: tuple[Check, ...] = CHECKS) -> Any:
     """Invoke the memento CLI on a tree with a fixed clock and the given checks."""
-    environment = Environment(store=Store(root=root, replace_file=os.replace), now=lambda: now, checks=checks)
+    environment = Environment(store=Store(root=root, replace_file=os.replace), now=lambda: now, checks=checks, run_git=git_exit_status)
     return CliRunner().invoke(app, list(args), obj=environment)
 
 

@@ -1,7 +1,10 @@
 """The git queries the records need, each run against an explicit root."""
 
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
+
+type GitRunner = Callable[..., subprocess.CompletedProcess[bytes]]
 
 
 def git_exit_status(root: Path, *args: str) -> subprocess.CompletedProcess[bytes]:

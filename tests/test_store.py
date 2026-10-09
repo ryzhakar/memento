@@ -4,11 +4,12 @@ import os
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import IO, Any
 
 import pytest
 
 from memento import Refusal
-from memento.store import Store
+from memento.store import RestoreFailed, Store
 from tests.memento.conftest import git
 
 LOCK_WAIT_SECONDS = 0.3
@@ -176,3 +177,77 @@ def test_a_second_transaction_waits_for_the_first_to_land(repository: Path) -> N
         for writer in writers:
             writer.join()
     assert (repository / "kept.md").read_text(encoding="utf-8") == "kept line\nfirst writer\nsecond writer\n"
+
+
+def test_a_write_under_missing_directories_lands_with_them(repository: Path) -> None:
+    with Store(root=repository, replace_file=os.replace).transaction() as act:
+        act.append("history/2026-10-02/events.md", "first line\n")
+    assert (repository / "history/2026-10-02/events.md").read_text(encoding="utf-8") == "first line\n"
+
+
+def test_a_failed_landing_removes_the_directories_it_created(repository: Path) -> None:
+    (repository / "history").mkdir()
+    with pytest.raises(OSError, match="replacement of events.md failed"):
+        with Store(root=repository, replace_file=failing_on_call(2)).transaction() as act:
+            act.append("kept.md", "second line\n")
+            act.append("history/2026-10-02/deep/events.md", "first line\n")
+    assert sorted(path.name for path in (repository / "history").iterdir()) == []
+    assert (repository / "kept.md").read_text(encoding="utf-8") == "kept line\n"
+
+
+def test_a_created_directory_another_writer_filled_during_a_failed_landing_is_reported(repository: Path) -> None:
+    def fill_then_fail(source: Path, target: Path) -> None:
+        """Drop a stray file beside the target, then fail the replacement."""
+        (target.parent / "stray.md").write_text("stray\n", encoding="utf-8")
+        raise OSError("replacement failed")
+
+    with pytest.raises(RestoreFailed, match="rollback left directory .*/history/2026-10-02 it created"):
+        with Store(root=repository, replace_file=fill_then_fail).transaction() as act:
+            act.append("history/2026-10-02/events.md", "first line\n")
+
+
+def open_descriptor_count() -> int:
+    """How many file descriptors this process holds open."""
+    return len(os.listdir("/dev/fd"))
+
+
+def test_a_temporary_that_cannot_be_opened_for_writing_leaves_no_descriptor_or_file(repository: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    opening_path = Path.open
+
+    def refusing_writes(path: Path, mode: str = "r", buffering: int = -1, encoding: str | None = None) -> IO[Any]:
+        """Open a path as pathlib does, except for writing, which fails."""
+        if "w" in mode:
+            raise OSError("opening for writing failed")
+        return opening_path(path, mode, buffering, encoding)
+
+    def refusing_descriptor(*args: object, **kwargs: object) -> object:
+        """Fail as os.fdopen would when it cannot wrap a descriptor."""
+        raise OSError("opening for writing failed")
+
+    monkeypatch.setattr(Path, "open", refusing_writes)
+    monkeypatch.setattr(os, "fdopen", refusing_descriptor)
+    before = open_descriptor_count()
+    with pytest.raises(OSError, match="opening for writing failed"):
+        with Store(root=repository, replace_file=os.replace).transaction() as act:
+            act.append("kept.md", "more\n")
+    assert (open_descriptor_count(), sorted(path.name for path in repository.iterdir())) == (before, [".git", "kept.md"])
+
+
+def test_a_rollback_that_cannot_restore_one_file_restores_the_others_and_names_it(repository: Path) -> None:
+    calls: list[Path] = []
+
+    def lock_first_then_fail_third(source: Path, target: Path) -> None:
+        """Replace the first file and leave it read-only, replace the second, and fail the third."""
+        calls.append(target)
+        if len(calls) == 3:
+            raise OSError("replacement of third.md failed")
+        os.replace(source, target)
+        if len(calls) == 1:
+            target.chmod(0o444)
+
+    with pytest.raises(RestoreFailed, match=r"^rollback left kept\.md differing from its bytes or permission bits before the act$"):
+        with Store(root=repository, replace_file=lock_first_then_fail_third).transaction() as act:
+            act.append("kept.md", "second line\n")
+            act.append("second.md", "first line\n")
+            act.append("third.md", "first line\n")
+    assert (sorted(path.name for path in repository.iterdir()), leftover_temporaries(repository)) == ([".git", "kept.md"], [])

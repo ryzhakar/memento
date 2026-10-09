@@ -11,6 +11,7 @@ from memento.__main__ import CHECKS
 from memento.candidate import refuse_new_failures
 from memento.findings import Check, Corpus, Finding, warn
 from memento.schema import load_corpus
+from memento.git import git_exit_status
 from memento.store import Store
 from tests.memento.conftest import FIXED_NOW, HISTORY, replace_once
 
@@ -21,7 +22,7 @@ MISSING_POINTER = "The scorer slices its input, as docs/missing.md says.\n"
 
 def environment_for(root: Path, checks: tuple[Check, ...] = CHECKS) -> Environment:
     """The environment a verb receives for a tree, carrying the given checks."""
-    return Environment(store=Store(root=root, replace_file=os.replace), now=lambda: FIXED_NOW, checks=checks)
+    return Environment(store=Store(root=root, replace_file=os.replace), now=lambda: FIXED_NOW, checks=checks, run_git=git_exit_status)
 
 
 def tree_bytes(root: Path) -> dict[str, bytes]:
@@ -68,7 +69,8 @@ def test_a_new_events_file_off_the_events_shape_is_refused(record_tree: Path) ->
     with pytest.raises(Refusal) as refusal:
         refuse_new_failures(environment_for(record_tree), changes)
     assert str(refusal.value) == (
-        f"the change adds 1 FAIL: {HISTORY}/2026-10-02/events.md  not 'YYYY-MM-DDTHH:MM | actor | kind | what'"
+        f"the change adds 1 FAIL: {HISTORY}/2026-10-02/events.md  not 'YYYY-MM-DDTHH:MM | actor | kind | what': "
+        "actor 'someone' is not owner, self, agent:<name> or tool:<name>"
     )
 
 

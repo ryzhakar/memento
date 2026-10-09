@@ -6,8 +6,9 @@ from pathlib import Path
 
 import typer
 
-from memento import Environment, changelog, clock, journal, living, measure, pointers, schema
+from memento import Environment, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, schema
 from memento.findings import FAIL, Check, run_checks
+from memento.git import git_exit_status
 from memento.schema import load_corpus
 from memento.store import Store
 
@@ -31,14 +32,15 @@ CHECKS: tuple[Check, ...] = (
     living.check_charter,
     living.check_map,
     changelog.check_change_log,
-    journal.check_event_lines,
-    journal.check_close_blocks,
+    journal_checks.check_event_lines,
+    journal_checks.check_close_blocks,
     living.check_directives,
     changelog.check_change_log_pointers,
     pointers.check_no_hard_wrap,
     living.check_results_table,
-    journal.check_failures,
-    journal.check_spans_closed_in_digest,
+    journal_checks.check_failures,
+    journal_checks.check_spans_closed_in_digest,
+    journal_checks.check_journal_history,
     pointers.check_pointers,
     pointers.check_budgets,
     pointers.check_history_admission,
@@ -49,6 +51,8 @@ CHECKS: tuple[Check, ...] = (
 app = typer.Typer(name="memento", no_args_is_help=True, add_completion=False)
 for group_name, group in KIND_GROUPS.items():
     app.add_typer(group, name=group_name)
+app.command("commit", help=commit.COMMIT_HELP)(commit.commit)
+app.command("patdown", help=read.PATDOWN_HELP)(read.patdown)
 
 
 @app.command(
@@ -69,9 +73,9 @@ def check(ctx: typer.Context) -> None:
 
 
 def main() -> None:
-    """Run the command against the checkout this package sits in, with the wall clock, atomic replacement and every check."""
+    """Run the command against the checkout this package sits in, with the wall clock, atomic replacement, every check and git."""
     root = Path(__file__).resolve().parent.parent
-    app(obj=Environment(store=Store(root=root, replace_file=os.replace), now=clock.now, checks=CHECKS))
+    app(obj=Environment(store=Store(root=root, replace_file=os.replace), now=clock.now, checks=CHECKS, run_git=git_exit_status))
 
 
 if __name__ == "__main__":
