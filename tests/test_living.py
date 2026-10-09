@@ -301,6 +301,7 @@ def test_the_real_conventions_file_is_byte_equal_after_replacing_every_rule_with
     import os
 
     from memento import Environment
+    from memento.git import git_exit_status
     from memento.living import block_span, directive_blocks, directive_replace, heading_of_block, labelled_lines
     from memento.store import Store
 
@@ -309,7 +310,7 @@ def test_the_real_conventions_file_is_byte_equal_after_replacing_every_rule_with
     (record_tree / "docs/conventions.md").write_text(real_text, encoding="utf-8")
     git(record_tree, "add", "docs/conventions.md")
     git(record_tree, "commit", "-q", "-m", "fixture real conventions")
-    environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=lambda: FIXED_NOW, checks=())
+    environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=lambda: FIXED_NOW, checks=(), run_git=git_exit_status)
     _, blocks = directive_blocks(real_text)
     for _number, rule_id, rule_lines in blocks:
         body, problems = labelled_lines(rule_lines, DIRECTIVE_WIDTH)
@@ -578,6 +579,7 @@ def test_the_real_results_file_is_byte_equal_after_replacing_every_row_with_itse
     import os
 
     from memento import Environment
+    from memento.git import git_exit_status
     from memento.living import results_replace
     from memento.store import Store
 
@@ -586,7 +588,7 @@ def test_the_real_results_file_is_byte_equal_after_replacing_every_row_with_itse
     (record_tree / "docs/results.md").write_text(real_text, encoding="utf-8")
     git(record_tree, "add", "docs/results.md")
     git(record_tree, "commit", "-q", "-m", "fixture real results")
-    environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=lambda: FIXED_NOW, checks=())
+    environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=lambda: FIXED_NOW, checks=(), run_git=git_exit_status)
     data_rows = [line for line in real_text.splitlines() if line.startswith("|")][2:]
     for line in data_rows:
         cells = [cell.strip() for cell in line.strip("|").split("|")]
