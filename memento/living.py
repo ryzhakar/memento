@@ -1,13 +1,21 @@
-"""Living records, corrected in place: charter, map, conventions and results."""
+"""Living records, corrected in place: charter, map, conventions, results, capabilities, recipes and specs."""
 
 import re
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping
+from datetime import date, datetime
+from pathlib import Path
+from typing import Annotated, Any, Self
 
 import typer
+import yaml
+from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
+from pydantic.fields import FieldInfo
 
+from memento import Environment, Refusal, construct, refusals_reported
+from memento.candidate import refuse_new_failures
 from memento.findings import DATE, SHA, Corpus, Finding, fail
 from memento.pointers import ground_findings, home_of
-from memento.schema import SCHEMA_HOME, home_pattern
+from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, home_pattern, load_corpus
 
 directive_group = typer.Typer(no_args_is_help=True, help="Conventions: add, replace or drop a rule.")
 results_group = typer.Typer(no_args_is_help=True, help="Results: add, replace or drop a contender's row.")
@@ -27,6 +35,7 @@ GROUND_MARK = "Ground:"
 COMPLETION_FIELD = "evidence"
 FINITE = "finite"
 STANDING = "standing"
+DIRECTIVE_WIDTH = 8
 RECORD_SPACE_ROOT = "docs/"
 JOURNAL_SPACE_ROOT = "docs/orchestration_log/"
 CONFIG_SPACE_ROOT = ".claude/"
@@ -141,15 +150,149 @@ def directive_blocks(text: str) -> tuple[list[str], list[tuple[int, str, list[tu
     return headings, blocks
 
 
+def one_line(text: str) -> str:
+    """Admit a value that is not blank and carries no line break."""
+    if not text.strip():
+        raise ValueError("is empty")
+    if text.splitlines() != [text]:
+        raise ValueError("carries a line break")
+    return text
+
+
+def table_cell(text: str) -> str:
+    """Admit a value fit for one table cell: not blank, one line, holding no '|'."""
+    one_line(text)
+    if "|" in text:
+        raise ValueError("holds '|', which breaks a table row")
+    return text
+
+
+def labelled_fields(model: type[BaseModel]) -> dict[str, FieldInfo]:
+    """The model's fields by the label or column each is spelled with in the schema and in input, in declaration order."""
+    return {(info.alias or name): info for name, info in model.model_fields.items()}
+
+
+def holds_text(info: FieldInfo) -> bool:
+    """Whether the field holds text, which an optional field may leave null."""
+    return info.annotation in (str, str | None)
+
+
+def fits_text_field(info: FieldInfo, value: object) -> bool:
+    """Whether value is text, or null where the field is optional."""
+    return isinstance(value, str) or (value is None and not info.is_required())
+
+
+def refuse_unknown_labels(kind: str, owner: str, fields: Mapping[str, FieldInfo], given: Mapping[str, object]) -> None:
+    """Refuse the first label or column in given that the model does not have."""
+    for label in given:
+        if label not in fields:
+            raise ValueError(f"{kind} '{label}' is not a {owner} {kind}")
+
+
+def refuse_missing_labels(kind: str, fields: Mapping[str, FieldInfo], given: Mapping[str, object]) -> None:
+    """Refuse the first required label or column of the model that given leaves out."""
+    for label, info in fields.items():
+        if info.is_required() and label not in given:
+            raise ValueError(f"{kind} '{label}' is missing")
+
+
+def refuse_non_text_values(kind: str, fields: Mapping[str, FieldInfo], given: Mapping[str, object]) -> None:
+    """Refuse the first text label or column of the model that given fills with a value that is not text."""
+    for label, info in fields.items():
+        if holds_text(info) and label in given and not fits_text_field(info, given[label]):
+            raise ValueError(f"{kind} '{label}' is not text")
+
+
+def refuse_misshapen_input(model: type[BaseModel], kind: str, owner: str, given: Mapping[str, object]) -> Mapping[str, object]:
+    """The given mapping, or the refusal naming its first unknown, missing or non-text label or column."""
+    fields = labelled_fields(model)
+    refuse_unknown_labels(kind, owner, fields, given)
+    refuse_missing_labels(kind, fields, given)
+    refuse_non_text_values(kind, fields, given)
+    return given
+
+
+def refuse_unfit_value(kind: str, name: str, text: str, admit: Callable[[str], str]) -> None:
+    """Refuse text, naming the label or column it sits under, when admit finds it unfit."""
+    try:
+        admit(text)
+    except ValueError as unfit:
+        raise ValueError(f"{kind} '{name}' {unfit}") from unfit
+
+
+
+class DirectiveRule(BaseModel):
+    """One conventions rule's labelled body, in the schema's label order."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    when: str
+    do: str
+    never: str | None = None
+    why: str | None = None
+    ground: str
+    except_: str | None = Field(default=None, alias="except")
+
+    @model_validator(mode="before")
+    @classmethod
+    def input_fits_the_rules_labels(cls, given: Mapping[str, object]) -> Mapping[str, object]:
+        """Refuse input naming a label the rule lacks, leaving a required one out, or giving a value that is not text."""
+        return refuse_misshapen_input(cls, "label", "rule", given)
+
+    @model_validator(mode="after")
+    def every_label_value_fits_one_line(self) -> Self:
+        """Refuse a label whose value is empty or runs over a line, naming the label."""
+        for label, value in self.body().items():
+            refuse_unfit_value("label", label, value, one_line)
+        return self
+
+    def body(self) -> dict[str, str]:
+        """This rule's labelled values, by label, carrying only the labels this rule holds one for."""
+        return {label: value for label, value in self.model_dump(by_alias=True).items() if value is not None}
+
+    def render(self, width: int = DIRECTIVE_WIDTH) -> str:
+        """The rule's body as its block holds it: one label line per label it carries, padded to width."""
+        return "\n".join(label.ljust(width) + value for label, value in self.body().items())
+
+
+DIRECTIVE_LABELS = tuple(labelled_fields(DirectiveRule))
+DIRECTIVE_REQUIRED_LABELS = tuple(label for label, info in labelled_fields(DirectiveRule).items() if info.is_required())
+
+
+def labelled_lines(rule_lines: list[tuple[int, str]], width: int) -> tuple[dict[str, tuple[int, str]] | None, list[tuple[int, str]]]:
+    """Each label's line number and value a block's lines hold, or the line-numbered shape problems that keep it from parsing."""
+    problems: list[tuple[int, str]] = []
+    body: dict[str, tuple[int, str]] = {}
+    order: list[str] = []
+    for line_number, line in rule_lines:
+        label = line[:width].strip()
+        if label not in DIRECTIVE_LABELS or line[:width] != label.ljust(width):
+            problems.append((line_number, f"not a '{'/'.join(DIRECTIVE_LABELS)}' line padded to {width}"))
+            continue
+        order.append(label)
+        body[label] = (line_number, line[width:])
+    if problems:
+        return None, problems
+    if order != sorted(order, key=DIRECTIVE_LABELS.index) or len(order) != len(set(order)):
+        where = rule_lines[0][0] if rule_lines else 0
+        return None, [(where, f"labels {order} not in the schema's order, or repeated")]
+    return body, []
+
+
 def check_directives(corpus: Corpus) -> Iterator[Finding]:
-    """Fail conventions headings, rule ids, label lines and grounds that break the schema's directive shape."""
+    """Fail conventions headings, rule ids, label lines, label values and grounds that break the schema's directive shape."""
     spec = corpus.schema["kinds"]["directive"]
     path = home_of(corpus, "directive")
-    labels, width = spec["labels"], spec["label_width"]
+    width = spec["label_width"]
     headings, blocks = directive_blocks(corpus.text(path))
     ids: set[str] = set()
     if headings != spec["headings"]:
         yield fail(path, f"headings {headings} are not the schema's {spec['headings']}")
+    if list(spec["labels"]) != list(DIRECTIVE_LABELS) or list(spec["required_labels"]) != list(DIRECTIVE_REQUIRED_LABELS):
+        yield fail(
+            SCHEMA_HOME,
+            f"schema declares directive labels {spec['labels']} (required {spec['required_labels']}); "
+            f"memento's DirectiveRule knows {list(DIRECTIVE_LABELS)} (required {list(DIRECTIVE_REQUIRED_LABELS)}); {AMEND_TOGETHER}",
+        )
     for number, rule_id, rule_lines in blocks:
         where = f"{path}:{number}"
         if not RULE_ID.fullmatch(rule_id):
@@ -157,37 +300,566 @@ def check_directives(corpus: Corpus) -> Iterator[Finding]:
         if rule_id in ids:
             yield fail(where, f"rule id '{rule_id}' appears twice")
         ids.add(rule_id)
-        order = []
-        for line_number, line in rule_lines:
-            label = line[:width].strip()
-            if label not in labels or line[:width] != label.ljust(width):
-                yield fail(f"{path}:{line_number}", f"not a '{'/'.join(labels)}' line padded to {width}")
-                continue
-            order.append(label)
-            if label == "ground":
-                yield from ground_findings(corpus, f"{path}:{line_number}", line[width:])
-        missing = [label for label in spec["required_labels"] if label not in order]
+        body, problems = labelled_lines(rule_lines, width)
+        for line_number, message in problems:
+            yield fail(f"{path}:{line_number}", message)
+        if body is None:
+            continue
+        missing = [label for label in DIRECTIVE_REQUIRED_LABELS if label not in body]
         if missing:
             yield fail(where, f"{rule_id}: missing {', '.join(missing)}")
-        if order != sorted(order, key=labels.index) or len(order) != len(set(order)):
-            yield fail(where, f"{rule_id}: labels {order} not in the schema's order, or repeated")
+        else:
+            try:
+                construct(DirectiveRule, **{label: value for label, (_line, value) in body.items()})
+            except Refusal as refusal:
+                yield fail(where, f"{rule_id}: {refusal}")
+        if "ground" in body:
+            ground_line, ground_value = body["ground"]
+            yield from ground_findings(corpus, f"{path}:{ground_line}", ground_value)
+
+
+def parsed_date(value: object) -> object:
+    """A date object, from a `datetime.date` without a time or a real 'YYYY-MM-DD' string; anything else is refused."""
+    if isinstance(value, date) and not isinstance(value, datetime):
+        return value
+    if not isinstance(value, str) or not re.fullmatch(DATE, value):
+        raise ValueError(f"date cell '{value}' is not YYYY-MM-DD")
+    try:
+        return date.fromisoformat(value)
+    except ValueError as unreal:
+        raise ValueError(f"date cell '{value}' is not a real date") from unreal
+
+
+ResultDate = Annotated[date, BeforeValidator(parsed_date)]
+
+
+class ResultRow(BaseModel):
+    """One contender's row, in the schema's column order."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    approach: str
+    world: str
+    labels: str
+    folds: str
+    r_at_p95_per_fold: str = Field(alias="R@P95/fold")
+    p_at_r10_per_fold: str = Field(alias="P@R10/fold")
+    p_at_r30_per_fold: str = Field(alias="P@R30/fold")
+    p_at_r50_per_fold: str = Field(alias="P@R50/fold")
+    bar: str
+    run: str
+    verdict: str
+    date: ResultDate
+
+    @model_validator(mode="before")
+    @classmethod
+    def input_fits_the_results_columns(cls, given: Mapping[str, object]) -> Mapping[str, object]:
+        """Refuse input naming a column the table lacks, leaving one out, or giving a text cell a value that is not text."""
+        return refuse_misshapen_input(cls, "column", "results", given)
+
+    @model_validator(mode="after")
+    def every_cell_fits_one_table_cell(self) -> Self:
+        """Refuse a column whose cell is empty, runs over a line or holds '|', naming the column."""
+        for column, cell in zip(self.columns(), self.cells(), strict=True):
+            refuse_unfit_value("column", column, cell, table_cell)
+        return self
+
+    def key(self) -> tuple[str, str]:
+        """This row's (approach, world) identity."""
+        return (self.approach, self.world)
+
+    @classmethod
+    def columns(cls) -> tuple[str, ...]:
+        """This row's columns, in the schema's order."""
+        return tuple(labelled_fields(cls))
+
+    def cells(self) -> list[str]:
+        """This row's cells, in column order."""
+        return [value.isoformat() if isinstance(value, date) else value for value in (getattr(self, name) for name in type(self).model_fields)]
+
+    def render(self) -> str:
+        """This row as the table holds it."""
+        return "| " + " | ".join(self.cells()) + " |"
+
+
+RESULT_COLUMNS = ResultRow.columns()
 
 
 def check_results_table(corpus: Corpus) -> Iterator[Finding]:
-    """Fail a results table whose columns, cell counts or date cells break the schema's results shape."""
+    """Fail a results table whose columns, cell counts, row contents or repeated keys break the schema's results shape."""
     spec = corpus.schema["kinds"]["results"]
     path = home_of(corpus, "results")
+    if list(spec["columns"]) != list(RESULT_COLUMNS):
+        yield fail(
+            SCHEMA_HOME,
+            f"schema declares results columns {spec['columns']}; memento's ResultRow knows {list(RESULT_COLUMNS)}; {AMEND_TOGETHER}",
+        )
     rows = [(number, line) for number, line in enumerate(corpus.text(path).splitlines(), 1) if line.startswith("|")]
     if not rows:
         yield fail(path, "holds no table")
         return
     header = [cell.strip() for cell in rows[0][1].strip("|").split("|")]
-    if header != spec["columns"]:
-        yield fail(f"{path}:{rows[0][0]}", f"columns {header} are not the schema's {spec['columns']}")
+    if header != list(RESULT_COLUMNS):
+        yield fail(f"{path}:{rows[0][0]}", f"columns {header} are not the schema's {list(RESULT_COLUMNS)}")
+    keys: dict[tuple[str, str], int] = {}
     for number, line in rows[2:]:
         cells = [cell.strip() for cell in line.strip("|").split("|")]
-        if len(cells) != len(spec["columns"]):
-            yield fail(f"{path}:{number}", f"{len(cells)} cells for {len(spec['columns'])} columns")
-        elif not re.fullmatch(DATE, cells[-1]):
-            yield fail(f"{path}:{number}", f"date cell '{cells[-1]}' is not YYYY-MM-DD")
+        if len(cells) != len(RESULT_COLUMNS):
+            yield fail(f"{path}:{number}", f"{len(cells)} cells for {len(RESULT_COLUMNS)} columns")
+            continue
+        try:
+            key = construct(ResultRow, **dict(zip(RESULT_COLUMNS, cells))).key()
+        except Refusal as refusal:
+            yield fail(f"{path}:{number}", str(refusal))
+            continue
+        if key in keys:
+            yield fail(f"{path}:{number}", f"(approach, world) {key} already appears at {path}:{keys[key]}")
+            continue
+        keys[key] = number
 
+
+class RealDateLoader(yaml.SafeLoader):
+    """A safe YAML loader that reports a date or time that is not real as a YAML error."""
+
+
+def construct_real_timestamp(loader: yaml.SafeLoader, node: yaml.ScalarNode) -> date:
+    """The date or time a timestamp node holds, or a YAML error naming it when it is not real."""
+    try:
+        return yaml.SafeLoader.construct_yaml_timestamp(loader, node)
+    except ValueError as unreal:
+        raise yaml.constructor.ConstructorError(None, None, f"'{node.value}' is not a real date or time", node.start_mark) from unreal
+
+
+RealDateLoader.add_constructor("tag:yaml.org,2002:timestamp", construct_real_timestamp)
+
+
+def load_yaml_mapping(path: str) -> dict[str, Any]:
+    """The block-form YAML mapping a structured-input file holds, its own errors turned into a refusal."""
+    try:
+        text = Path(path).read_text(encoding="utf-8")
+    except UnicodeDecodeError as error:
+        raise Refusal(f"'{path}' is not UTF-8") from error
+    except OSError as error:
+        raise Refusal(f"'{path}' does not read: {error}") from error
+    try:
+        data = yaml.load(text, Loader=RealDateLoader)
+    except yaml.YAMLError as error:
+        raise Refusal(f"'{path}' is not valid YAML: {error}") from error
+    if not isinstance(data, dict):
+        raise Refusal(f"'{path}' is not a YAML mapping")
+    for key in data:
+        if not isinstance(key, str):
+            raise Refusal(f"'{path}' names a key that is not text: {key!r}")
+    return data
+
+
+def replace_once_text(corpus: Corpus, path: str, old: str, new: str) -> str:
+    """The text of path with its one occurrence of old replaced by new, refusing when old occurs zero or several times."""
+    text = corpus.text(path)
+    count = text.count(old)
+    if count != 1:
+        raise Refusal(f"'{old}' occurs {count} times in {path}; replace takes exactly one occurrence")
+    return text.replace(old, new)
+
+
+def replace_in_place(environment: Environment, path: str, old: str, new: str) -> None:
+    """Replace one exact occurrence of old with new in path, refusing a candidate FAIL, and land it."""
+    corpus = load_corpus(environment.store.root)
+    new_text = replace_once_text(corpus, path, old, new)
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+
+
+HEADING_LINE = re.compile(r"(?m)^## (?P<title>.+)$")
+RULE_HEADER_LINE = re.compile(r"(?m)^### (?P<id>\S+)$")
+
+
+def next_marker_after(text: str, position: int) -> int:
+    """The start of the next '## ' or '### ' line after position, or the text's end."""
+    markers = [match.start() for match in (*HEADING_LINE.finditer(text), *RULE_HEADER_LINE.finditer(text)) if match.start() > position]
+    return min(markers, default=len(text))
+
+
+def section_span(text: str, heading: str, path: str) -> tuple[int, int]:
+    """The character span of a heading's section body: after its own line, up to the next '## ' line or the text's end."""
+    match = next((match for match in HEADING_LINE.finditer(text) if match["title"].strip().lower() == heading.strip().lower()), None)
+    if match is None:
+        raise Refusal(f"heading '{heading}' is not one of the schema's headings")
+    headings_after = [other.start() for other in HEADING_LINE.finditer(text) if other.start() > match.start()]
+    return match.end() + 1, min(headings_after, default=len(text))
+
+
+def block_span(text: str, rule_id: str, path: str) -> tuple[int, int]:
+    """The character span of one rule's block: its header line through the line before the next header or heading."""
+    match = next((match for match in RULE_HEADER_LINE.finditer(text) if match["id"] == rule_id), None)
+    if match is None:
+        raise Refusal(f"rule '{rule_id}' is not in {path}")
+    return match.start(), next_marker_after(text, match.start())
+
+
+def heading_of_block(text: str, position: int, path: str) -> str:
+    """The heading whose section holds the block starting at position."""
+    headings_before = [match for match in HEADING_LINE.finditer(text) if match.start() < position]
+    if not headings_before:
+        raise Refusal(f"'{path}' has no heading above this rule")
+    return headings_before[-1]["title"]
+
+
+BLOCK_SEPARATOR = "\n\n"
+
+
+def closing(text: str, end: int) -> str:
+    """The whitespace that follows a block ending at end: a blank-line separator, or a bare newline at the text's end."""
+    return BLOCK_SEPARATOR if end < len(text) else "\n"
+
+
+def insert_block(text: str, heading: str, path: str, block_text: str) -> str:
+    """Text with a new block appended at the end of a heading's section, in its established one-blank-line form."""
+    start, end = section_span(text, heading, path)
+    existing = text[start:end].strip("\n")
+    prefix = f"\n{existing}{BLOCK_SEPARATOR}" if existing else "\n"
+    return text[:start] + prefix + block_text.rstrip("\n") + closing(text, end) + text[end:]
+
+
+def directive_input(path: str) -> tuple[str, str, DirectiveRule]:
+    """The id, heading and labelled body a rule.yaml file declares."""
+    data = load_yaml_mapping(path)
+    try:
+        rule_id, heading = data.pop("id"), data.pop("heading")
+    except KeyError as missing:
+        raise Refusal(f"'{path}' is missing {missing.args[0]!r}") from missing
+    if not isinstance(rule_id, str):
+        raise Refusal(f"'{path}' names a non-text id")
+    if not isinstance(heading, str):
+        raise Refusal(f"'{path}' names a non-text heading")
+    return rule_id, heading, construct(DirectiveRule, **data)
+
+
+def directive_corpus(environment: Environment) -> tuple[Corpus, str, int]:
+    """The current corpus, the directive home and its schema-declared label width."""
+    corpus = load_corpus(environment.store.root)
+    spec = corpus.schema["kinds"]["directive"]
+    return corpus, home_of(corpus, "directive"), spec["label_width"]
+
+
+def directive_add(environment: Environment, rule_path: str) -> tuple[str, str]:
+    """Add a new rule block at the end of its heading's section, refusing a candidate FAIL."""
+    rule_id, heading, rule = directive_input(rule_path)
+    corpus, path, width = directive_corpus(environment)
+    new_text = insert_block(corpus.text(path), heading, path, f"### {rule_id}\n{rule.render(width)}")
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+    return path, rule_id
+
+
+def directive_replace(environment: Environment, rule_path: str) -> tuple[str, str]:
+    """Replace the rule block with this id, moved to a new heading's section when its heading changed."""
+    rule_id, heading, rule = directive_input(rule_path)
+    corpus, path, width = directive_corpus(environment)
+    text = corpus.text(path)
+    start, end = block_span(text, rule_id, path)
+    new_block = f"### {rule_id}\n{rule.render(width)}"
+    if heading_of_block(text, start, path).strip().lower() == heading.strip().lower():
+        new_text = text[:start] + new_block.rstrip("\n") + closing(text, end) + text[end:]
+    else:
+        without_old = text[:start] + text[end:]
+        new_text = insert_block(without_old, heading, path, new_block)
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+    return path, rule_id
+
+
+def directive_drop(environment: Environment, rule_id: str) -> str:
+    """Delete the rule block with this id, refusing a candidate FAIL (a dangling citation included)."""
+    corpus, path, _width = directive_corpus(environment)
+    text = corpus.text(path)
+    start, end = block_span(text, rule_id, path)
+    new_text = text[:start] + text[end:]
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+    return path
+
+
+def find_row_line(lines: list[str], key: tuple[str, str], path: str) -> int:
+    """The line index of the one data row holding this (approach, world) key, refusing when none does."""
+    for index, line in enumerate(lines):
+        if index < 2 or not line.startswith("|"):
+            continue
+        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        if len(cells) >= 2 and (cells[0], cells[1]) == key:
+            return index
+    raise Refusal(f"no row in {path} carries key {key}")
+
+
+def results_lines(environment: Environment) -> tuple[str, list[str]]:
+    """The results home and its current lines."""
+    corpus = load_corpus(environment.store.root)
+    path = home_of(corpus, "results")
+    return path, corpus.text(path).splitlines()
+
+
+def results_add(environment: Environment, row_path: str) -> tuple[str, tuple[str, str]]:
+    """Add a new row at the end of the table, refusing a candidate FAIL (an existing key included)."""
+    row = construct(ResultRow, **load_yaml_mapping(row_path))
+    path, lines = results_lines(environment)
+    new_text = "\n".join([*lines, row.render()]) + "\n"
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+    return path, row.key()
+
+
+def results_replace(environment: Environment, row_path: str) -> tuple[str, tuple[str, str]]:
+    """Replace the row holding this row's (approach, world) key, refusing a candidate FAIL."""
+    row = construct(ResultRow, **load_yaml_mapping(row_path))
+    path, lines = results_lines(environment)
+    lines[find_row_line(lines, row.key(), path)] = row.render()
+    new_text = "\n".join(lines) + "\n"
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+    return path, row.key()
+
+
+def results_drop(environment: Environment, approach: str, world: str) -> str:
+    """Delete the row holding this (approach, world) key, refusing a candidate FAIL."""
+    path, lines = results_lines(environment)
+    del lines[find_row_line(lines, (approach, world), path)]
+    new_text = "\n".join(lines) + "\n"
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+    return path
+
+
+def spec_path(name: str) -> str:
+    """The project-relative home one spec's name resolves to."""
+    return f"docs/specs/{name}.md"
+
+
+def spec_add(environment: Environment, name: str, draft_path: str) -> str:
+    """Add a new spec from a draft file's bytes, refusing a name outside the schema's pattern or an existing spec."""
+    if not RULE_ID.fullmatch(name):
+        raise Refusal(f"spec name '{name}' is not lowercase words joined by hyphens")
+    path = spec_path(name)
+    corpus = load_corpus(environment.store.root)
+    if corpus.exists(path):
+        raise Refusal(f"'{path}' already exists")
+    try:
+        text = Path(draft_path).read_text(encoding="utf-8")
+    except OSError as error:
+        raise Refusal(f"'{draft_path}' does not read: {error}") from error
+    refuse_new_failures(environment, {path: text})
+    with environment.store.transaction() as act:
+        act.replace(path, text)
+    return path
+
+
+def spec_archive(environment: Environment, name: str) -> tuple[str, str]:
+    """Move a spec whole to the archive, dated by today, refusing when it is absent or the destination exists."""
+    path = spec_path(name)
+    corpus = load_corpus(environment.store.root)
+    if not corpus.exists(path):
+        raise Refusal(f"'{path}' does not exist")
+    archive_path = f"docs/orchestration_log/archive/spec-{name}-{environment.now().date().isoformat()}.md"
+    if corpus.exists(archive_path):
+        raise Refusal(f"'{archive_path}' already exists")
+    text = corpus.text(path)
+    refuse_new_failures(environment, {path: None, archive_path: text})
+    with environment.store.transaction() as act:
+        act.remove(path)
+        act.replace(archive_path, text)
+    return path, archive_path
+
+
+@directive_group.command(
+    "add",
+    help=(
+        "Add a new rule at the end of its heading's section in docs/conventions.md, from a block-form YAML file "
+        "naming id, heading, when, do, never, why, ground and except. Prints 'docs/conventions.md: <id>'. Refuses: "
+        "a file that does not read, is not UTF-8, is not valid YAML or is not a mapping; a key that is not text; "
+        "a missing or non-text id or heading; a label that is not a rule label; a required label (when, do, "
+        "ground) is missing; a label value that is not text; a label value that is empty, blank or carries a line "
+        "break; the id is not lowercase words joined by hyphens; the heading is not one of the schema's; a ground "
+        "naming no committed path, SHA, record heading or dated owner ruling; the id already exists; any other "
+        "candidate FAIL."
+    ),
+)
+def directive_add_command(ctx: typer.Context, rule: str = typer.Argument(..., help="Path to the rule.yaml file.")) -> None:
+    """Add a new conventions rule from a rule.yaml file."""
+    with refusals_reported():
+        path, rule_id = directive_add(ctx.obj, rule)
+    typer.echo(f"{path}: {rule_id}")
+
+
+@directive_group.command(
+    "replace",
+    help=(
+        "Replace the rule this id names with a rule.yaml file's content, moved to a new heading's section when its "
+        "heading changed. Prints 'docs/conventions.md: <id>'. Refuses: the id does not exist; any refusal 'directive "
+        "add' names."
+    ),
+)
+def directive_replace_command(ctx: typer.Context, rule: str = typer.Argument(..., help="Path to the rule.yaml file.")) -> None:
+    """Replace a conventions rule from a rule.yaml file."""
+    with refusals_reported():
+        path, rule_id = directive_replace(ctx.obj, rule)
+    typer.echo(f"{path}: {rule_id}")
+
+
+@directive_group.command(
+    "drop",
+    help=(
+        "Delete the rule this id names from docs/conventions.md. Prints 'docs/conventions.md: <id>'. Refuses: the "
+        "id does not exist; the rule is cited as a conventions rule in a record or in tracked code."
+    ),
+)
+def directive_drop_command(ctx: typer.Context, rule_id: str = typer.Argument(..., help="The rule's id.")) -> None:
+    """Delete a conventions rule by its id."""
+    with refusals_reported():
+        path = directive_drop(ctx.obj, rule_id)
+    typer.echo(f"{path}: {rule_id}")
+
+
+@results_group.command(
+    "add",
+    help=(
+        "Add a new row at the end of docs/results.md, from a block-form YAML file naming the twelve schema columns "
+        "(date a YAML date). Prints 'docs/results.md: (<approach>, <world>)'. Refuses: a file that does not read, "
+        "is not UTF-8, is not valid YAML or is not a mapping; a key that is not text; a column that is not a "
+        "results column; a column is missing; a cell that is not text; the (approach, world) key already exists; a "
+        "cell that is empty, blank, holds '|' or carries a line break; a date that is not a real YYYY-MM-DD; any "
+        "other candidate FAIL."
+    ),
+)
+def results_add_command(ctx: typer.Context, row: str = typer.Argument(..., help="Path to the row.yaml file.")) -> None:
+    """Add a new results row from a row.yaml file."""
+    with refusals_reported():
+        path, key = results_add(ctx.obj, row)
+    typer.echo(f"{path}: {key}")
+
+
+@results_group.command(
+    "replace",
+    help=(
+        "Replace the row holding a row.yaml file's (approach, world) key. Prints 'docs/results.md: (<approach>, "
+        "<world>)'. Refuses: the key does not exist; any refusal 'results add' names."
+    ),
+)
+def results_replace_command(ctx: typer.Context, row: str = typer.Argument(..., help="Path to the row.yaml file.")) -> None:
+    """Replace a results row from a row.yaml file."""
+    with refusals_reported():
+        path, key = results_replace(ctx.obj, row)
+    typer.echo(f"{path}: {key}")
+
+
+@results_group.command(
+    "drop",
+    help="Delete the row holding this (approach, world) key. Prints 'docs/results.md: (<approach>, <world>)'. Refuses: no such row.",
+)
+def results_drop_command(
+    ctx: typer.Context,
+    approach: str = typer.Argument(..., help="The row's approach cell."),
+    world: str = typer.Argument(..., help="The row's world cell."),
+) -> None:
+    """Delete a results row by its (approach, world) key."""
+    with refusals_reported():
+        path = results_drop(ctx.obj, approach, world)
+    typer.echo(f"{path}: ({approach}, {world})")
+
+
+@fact_group.command(
+    "replace",
+    help=(
+        "Replace the one occurrence of old with new in docs/capabilities.md. Prints 'docs/capabilities.md'. "
+        "Refuses: old occurs zero or several times in the file, naming the count; any candidate FAIL."
+    ),
+)
+def fact_replace_command(
+    ctx: typer.Context,
+    old: str = typer.Argument(..., help="The exact passage to replace."),
+    new: str = typer.Argument(..., help="The passage to put in its place."),
+) -> None:
+    """Replace one exact passage of docs/capabilities.md."""
+    with refusals_reported():
+        path = home_of(load_corpus(ctx.obj.store.root), "fact")
+        replace_in_place(ctx.obj, path, old, new)
+    typer.echo(path)
+
+
+@string_recipes_group.command(
+    "replace",
+    help=(
+        "Replace the one occurrence of old with new in docs/string_comparison_recipes.md. Prints "
+        "'docs/string_comparison_recipes.md'. Refuses: old occurs zero or several times in the file, naming the "
+        "count; any candidate FAIL."
+    ),
+)
+def string_recipes_replace_command(
+    ctx: typer.Context,
+    old: str = typer.Argument(..., help="The exact passage to replace."),
+    new: str = typer.Argument(..., help="The passage to put in its place."),
+) -> None:
+    """Replace one exact passage of docs/string_comparison_recipes.md."""
+    with refusals_reported():
+        path = home_of(load_corpus(ctx.obj.store.root), "string_recipes")
+        replace_in_place(ctx.obj, path, old, new)
+    typer.echo(path)
+
+
+@spec_group.command(
+    "add",
+    help=(
+        "Add docs/specs/<name>.md holding a draft file's bytes. Prints the path written. Refuses: the name exists; "
+        "the name is not lowercase words joined by hyphens; any candidate FAIL."
+    ),
+)
+def spec_add_command(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="The spec's name."),
+    draft: str = typer.Argument(..., help="Path to the draft file whose bytes become the spec."),
+) -> None:
+    """Add a new spec from a draft file."""
+    with refusals_reported():
+        path = spec_add(ctx.obj, name, draft)
+    typer.echo(path)
+
+
+@spec_group.command(
+    "replace",
+    help=(
+        "Replace the one occurrence of old with new in docs/specs/<name>.md. Prints the path. Refuses: no such "
+        "spec; old occurs zero or several times, naming the count; any candidate FAIL."
+    ),
+)
+def spec_replace_command(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="The spec's name."),
+    old: str = typer.Argument(..., help="The exact passage to replace."),
+    new: str = typer.Argument(..., help="The passage to put in its place."),
+) -> None:
+    """Replace one exact passage of a spec."""
+    with refusals_reported():
+        path = spec_path(name)
+        corpus = load_corpus(ctx.obj.store.root)
+        if not corpus.exists(path):
+            raise Refusal(f"'{path}' does not exist")
+        replace_in_place(ctx.obj, path, old, new)
+    typer.echo(path)
+
+
+@spec_group.command(
+    "archive",
+    help=(
+        "Move docs/specs/<name>.md whole to docs/orchestration_log/archive/spec-<name>-<today>.md. Prints both "
+        "paths. Refuses: no such spec; the destination already exists."
+    ),
+)
+def spec_archive_command(ctx: typer.Context, name: str = typer.Argument(..., help="The spec's name.")) -> None:
+    """Archive a spec whole, dated by today."""
+    with refusals_reported():
+        path, archive_path = spec_archive(ctx.obj, name)
+    typer.echo(f"{path} -> {archive_path}")

@@ -67,9 +67,7 @@ def test_no_command_exists_for_a_group_memento_does_not_have(record_tree: Path, 
     assert f"No such command '{group}'" in result.stderr
 
 
-@pytest.mark.parametrize(
-    "group", ["digest", "failure", "change", "directive", "results", "fact", "string_recipes", "spec", "map", "measurement"]
-)
+@pytest.mark.parametrize("group", ["digest", "failure", "change", "fact", "string_recipes", "map", "measurement"])
 def test_a_group_registered_before_its_verbs_answers_no_such_command(record_tree: Path, group: str) -> None:
     result = run_memento(record_tree, group, "add")
     assert result.exit_code == USAGE_ERROR_EXIT_CODE
