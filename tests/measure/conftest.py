@@ -1,4 +1,4 @@
-"""A record tree holding two matchtuner code states, a measured log in scratch, and builders for run records and entry specs."""
+"""A record tree holding two tool code states, a measured log in scratch, and builders for run records and entry specs."""
 
 import hashlib
 from dataclasses import dataclass
@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 import yaml
 
-from tests.memento.conftest import commit_all, git, run_memento
+from tests.conftest import commit_all, git, run_memento
 
 MEASUREMENT_LOG = "docs/measurements.yaml"
 SPEC_DIRECTORY = "docs/orchestration_log/recon/2026-10-01/memento-in"
@@ -59,7 +59,7 @@ REPORT_TEXT = """# A report
 | 1 | 17.27 GB | 75.60 s |
 """
 REPORT_RAW = "| 1 | 17.27 GB | 75.60 s |\n"
-WORLD = "sephora.de × flaconi.de"
+WORLD = "shop-a.example × shop-b.example"
 INPUT_ADDRESS = "1ec1c72cc285e12cec252b24739064b1d87a5f016c506ea7625bbea119e8313f"
 
 
@@ -85,19 +85,19 @@ def write_yaml(path: Path, data: Any) -> Path:
     return path
 
 
-def commit_matchtuner(root: Path, commands: str) -> str:
-    """Commit a matchtuner CLI module holding the given commands and return the commit's sha."""
-    (root / "matchtuner").mkdir(exist_ok=True)
-    (root / "matchtuner/__main__.py").write_text(commands, encoding="utf-8")
+def commit_tool(root: Path, commands: str) -> str:
+    """Commit a tool CLI module holding the given commands and return the commit's sha."""
+    (root / "tool").mkdir(exist_ok=True)
+    (root / "tool/__main__.py").write_text(commands, encoding="utf-8")
     commit_all(root)
     return git(root, "rev-parse", "HEAD").strip()
 
 
 @pytest.fixture
 def measured(record_tree: Path, tmp_path: Path) -> MeasuredTree:
-    """The record tree with an old and a new matchtuner commit, and a scratch directory holding a time log and a report."""
-    old = commit_matchtuner(record_tree, OLD_COMMANDS)
-    new = commit_matchtuner(record_tree, NEW_COMMANDS)
+    """The record tree with an old and a new tool commit, and a scratch directory holding a time log and a report."""
+    old = commit_tool(record_tree, OLD_COMMANDS)
+    new = commit_tool(record_tree, NEW_COMMANDS)
     scratch = tmp_path / "scratch"
     scratch.mkdir()
     (scratch / "select.log").write_text(TIME_LOG, encoding="utf-8")
@@ -126,12 +126,12 @@ def parsed_run(tree: MeasuredTree, started: str, ended: str, **fields: Any) -> d
     run = {
         "item": "run",
         "provenance": {"parsed": {"log": str(log), "log_sha256": sha256_of(log)}},
-        "argv": ["/repo/.venv/bin/python", "-m", "matchtuner", "select"],
+        "argv": ["/repo/.venv/bin/python", "-m", "tool", "select"],
         "process": "fresh",
         "started": started,
         "ended": ended,
         "clock": {"stated": {"source": "select.log lines 1 and 6"}},
-        "contention": {"declared_solo": {"how_checked": "pressure 1 and no matchtuner stage at launch"}},
+        "contention": {"declared_solo": {"how_checked": "pressure 1 and no tool stage at launch"}},
         "pressure": {"declared": {"text": "1 at launch"}},
         "power": "unstated",
         "sleep": "unchecked",
@@ -171,7 +171,7 @@ def entry_spec(tree: MeasuredTree, items: list[Any], **fields: Any) -> dict[str,
     spec = {
         "question": "select peak at the old code",
         "subject": {"stage": {"command": "select"}},
-        "paths": ["matchtuner/"],
+        "paths": ["tool/"],
         "data": {
             "world": {"world": WORLD, "fold": {"seed": 42}, "inputs": [INPUT_ADDRESS], "scale": {"selection_nonmatches": 30714629}}
         },

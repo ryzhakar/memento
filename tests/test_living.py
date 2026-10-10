@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from memento.living import DIRECTIVE_LABELS, DIRECTIVE_REQUIRED_LABELS, DIRECTIVE_WIDTH, RESULT_COLUMNS
-from tests.memento.conftest import FIXED_NOW, commit_all, git, replace_once, run_memento
+from tests.conftest import FIXED_NOW, FIXTURES, commit_all, git, replace_once, run_memento
 
 RULE_YAML = "rule.yaml"
 ABSENT = object()
@@ -297,7 +297,7 @@ def test_a_rule_with_an_empty_label_value_fails_the_conventions(record_tree: Pat
     assert (result.exit_code, result.stdout) == (1, "FAIL  docs/conventions.md:5  measure-first: label 'when' is empty\nrecords: 1 FAIL, 0 WARN\n")
 
 
-def test_the_real_conventions_file_is_byte_equal_after_replacing_every_rule_with_itself(record_tree: Path) -> None:
+def test_the_sample_conventions_file_is_byte_equal_after_replacing_every_rule_with_itself(record_tree: Path) -> None:
     import os
 
     from memento import Environment
@@ -305,11 +305,10 @@ def test_the_real_conventions_file_is_byte_equal_after_replacing_every_rule_with
     from memento.living import block_span, directive_blocks, directive_replace, heading_of_block, labelled_lines
     from memento.store import Store
 
-    real = Path(__file__).resolve().parents[2] / "docs/conventions.md"
-    real_text = real.read_text(encoding="utf-8")
+    real_text = (FIXTURES / "conventions.md").read_text(encoding="utf-8")
     (record_tree / "docs/conventions.md").write_text(real_text, encoding="utf-8")
     git(record_tree, "add", "docs/conventions.md")
-    git(record_tree, "commit", "-q", "-m", "fixture real conventions")
+    git(record_tree, "commit", "-q", "-m", "fixture sample conventions")
     environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=lambda: FIXED_NOW, checks=(), run_git=git_exit_status)
     _, blocks = directive_blocks(real_text)
     for _number, rule_id, rule_lines in blocks:
@@ -575,7 +574,7 @@ def test_results_columns_match_the_schema(record_tree: Path) -> None:
     ]
 
 
-def test_the_real_results_file_is_byte_equal_after_replacing_every_row_with_itself(record_tree: Path) -> None:
+def test_the_sample_results_file_is_byte_equal_after_replacing_every_row_with_itself(record_tree: Path) -> None:
     import os
 
     from memento import Environment
@@ -583,11 +582,10 @@ def test_the_real_results_file_is_byte_equal_after_replacing_every_row_with_itse
     from memento.living import results_replace
     from memento.store import Store
 
-    real = Path(__file__).resolve().parents[2] / "docs/results.md"
-    real_text = real.read_text(encoding="utf-8")
+    real_text = (FIXTURES / "results.md").read_text(encoding="utf-8")
     (record_tree / "docs/results.md").write_text(real_text, encoding="utf-8")
     git(record_tree, "add", "docs/results.md")
-    git(record_tree, "commit", "-q", "-m", "fixture real results")
+    git(record_tree, "commit", "-q", "-m", "fixture sample results")
     environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=lambda: FIXED_NOW, checks=(), run_git=git_exit_status)
     data_rows = [line for line in real_text.splitlines() if line.startswith("|")][2:]
     for line in data_rows:
@@ -621,12 +619,10 @@ def test_fact_replace_refuses_a_candidate_fail(record_tree: Path) -> None:
 
 
 def test_fact_replace_deleting_a_heading_another_record_points_at_refuses(record_tree: Path) -> None:
-    root = Path(__file__).resolve().parents[2]
-    (record_tree / "docs/conventions.md").write_text((root / "docs/conventions.md").read_text(encoding="utf-8"), encoding="utf-8")
-    (record_tree / "docs/capabilities.md").write_text((root / "docs/capabilities.md").read_text(encoding="utf-8"), encoding="utf-8")
-    git(record_tree, "add", "docs/conventions.md", "docs/capabilities.md")
-    git(record_tree, "commit", "-q", "-m", "fixture real conventions and capabilities")
-    result = run_memento(record_tree, "fact", "replace", "## § Scoring\n", "## § Renamed Scoring\n")
+    (record_tree / "docs/conventions.md").write_text((FIXTURES / "conventions.md").read_text(encoding="utf-8"), encoding="utf-8")
+    git(record_tree, "add", "docs/conventions.md")
+    git(record_tree, "commit", "-q", "-m", "fixture sample conventions citing a capabilities heading")
+    result = run_memento(record_tree, "fact", "replace", "## Scoring\n", "## Renamed Scoring\n")
     assert result.exit_code == 1
     assert "capabilities § Scoring" in result.stderr
     assert "names no heading" in result.stderr

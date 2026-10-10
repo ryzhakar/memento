@@ -2,8 +2,8 @@
 
 import yaml
 
-from tests.memento.conftest import run_memento
-from tests.memento.measure.conftest import MEASUREMENT_LOG, MeasuredTree, add_entry, entry_spec, measurement_log, parsed_run, record_item, run_record
+from tests.conftest import run_memento
+from tests.measure.conftest import MEASUREMENT_LOG, MeasuredTree, add_entry, entry_spec, measurement_log, parsed_run, record_item, run_record
 
 SPEC_EXAMPLE_VOID = """---
 kind: void

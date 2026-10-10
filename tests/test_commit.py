@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from tests.memento.conftest import HISTORY, git, replace_once, run_memento
+from tests.conftest import HISTORY, git, replace_once, run_memento
 
 OPEN_EVENTS_FILE = f"{HISTORY}/2026-10-01/events.md"
 CAPABILITIES = "docs/capabilities.md"

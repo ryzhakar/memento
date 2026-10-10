@@ -2,16 +2,17 @@
 
 import ast
 import os
-import shutil
 import subprocess
 import sys
 from functools import partial
 from pathlib import Path
 
+import memento
 from memento.__main__ import CHECKS
 from memento.findings import Check
-from tests.memento.conftest import HISTORY, PROJECT_ROOT, fixture_schema, git, replace_once, run_memento
+from tests.conftest import HISTORY, fixture_schema, git, replace_once, run_memento
 
+PACKAGE_ROOT = Path(memento.__file__).resolve().parent
 CLEAN_SUMMARY = "records: 0 FAIL, 0 WARN\n"
 CLOSED_SPAN = f"{HISTORY}/2026-09-30"
 OPEN_SPAN = f"{HISTORY}/2026-10-01"
@@ -186,8 +187,8 @@ def registered_name(check: Check) -> str:
 def defined_check_names() -> set[str]:
     """Every top-level `check_*` function defined in a module under memento/."""
     names = set()
-    for path in sorted((PROJECT_ROOT / "memento").rglob("*.py")):
-        module = ".".join(path.relative_to(PROJECT_ROOT).with_suffix("").parts).removesuffix(".__init__")
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        module = ".".join(path.relative_to(PACKAGE_ROOT.parent).with_suffix("").parts).removesuffix(".__init__")
         tree = ast.parse(path.read_text(encoding="utf-8"))
         names |= {f"{module}.{node.name}" for node in tree.body if isinstance(node, ast.FunctionDef) and node.name.startswith("check_")}
     return names
@@ -198,14 +199,13 @@ def test_every_check_defined_under_memento_is_in_the_check_tuple() -> None:
 
 
 def test_the_real_entry_runs_every_check_on_the_tree_it_sits_in(record_tree: Path) -> None:
-    shutil.copytree(PROJECT_ROOT / "memento", record_tree / "memento", ignore=shutil.ignore_patterns("__pycache__"))
     replace_once(record_tree, "docs/results.md", "2026-10-01", "October")
     entry = subprocess.run(
         [sys.executable, "-m", "memento", "check"],
         cwd=record_tree,
         capture_output=True,
         text=True,
-        env=os.environ | {"PYTHONDONTWRITEBYTECODE": "1"},
+        env=os.environ | {"PYTHONDONTWRITEBYTECODE": "1", "PYTHONPATH": str(PACKAGE_ROOT.parent)},
         check=False,
     )
     finding = "FAIL  docs/results.md:5  date cell 'October' is not YYYY-MM-DD"

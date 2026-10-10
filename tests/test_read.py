@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from tests.memento.conftest import HISTORY, commit_tree, git, replace_once, run_memento
+from tests.conftest import HISTORY, commit_tree, git, replace_once, run_memento
 
 OPEN_EVENTS_FILE = f"{HISTORY}/2026-10-01/events.md"
 EVENING = datetime.fromisoformat("2026-10-01T19:00:00+02:00")

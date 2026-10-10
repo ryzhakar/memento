@@ -8,8 +8,9 @@ import pytest
 import yaml
 
 from memento.changelog import EntryShapeError, parse_entry_text, parse_raw_entry, split_log
-from tests.memento.conftest import PROJECT_ROOT, fixture_schema, git, replace_once, run_memento
+from tests.conftest import FIXTURES, fixture_schema, git, replace_once, run_memento
 
+SAMPLE_LOG = FIXTURES / "change_log.md"
 REQUIRED_ENTRY = {
     "end": None,
     "kind": "computed",
@@ -79,18 +80,17 @@ def test_add_appends_a_new_entry_in_schema_field_order(record_tree: Path) -> Non
     )
 
 
-def real_last_entry_text() -> str:
-    """The real docs/architecture_log.md's current last entry, rendered exactly as it stands (trailing_blank_lines == 0, since nothing follows it)."""
-    real_spec = yaml.safe_load((PROJECT_ROOT / ".claude/memento.yaml").read_text(encoding="utf-8"))["kinds"]["change"]
-    text = (PROJECT_ROOT / "docs/architecture_log.md").read_text(encoding="utf-8")
+def sample_last_entry_text() -> str:
+    """The sample log's last entry, rendered exactly as it stands (trailing_blank_lines == 0, since nothing follows it)."""
+    text = SAMPLE_LOG.read_text(encoding="utf-8")
     _prefix, raws = split_log(text)
-    entry = parse_raw_entry(raws[-1], real_spec)
+    entry = parse_raw_entry(raws[-1], spec())
     assert entry.trailing_blank_lines == 0
-    return entry.render(width=real_spec["label_width"])
+    return entry.render(width=spec()["label_width"])
 
 
-def test_add_closes_the_seam_behind_the_real_logs_last_entry(record_tree: Path) -> None:
-    last_entry_text = real_last_entry_text()
+def test_add_closes_the_seam_behind_the_sample_logs_last_entry(record_tree: Path) -> None:
+    last_entry_text = sample_last_entry_text()
     (record_tree / "docs/architecture_log.md").write_text("# Architecture Log\n\n" + last_entry_text, encoding="utf-8")
     entry_path = write_entry_yaml(record_tree.parent, start="2026-10-10", title="A later change", merged=head_sha(record_tree))
     result = run_memento(record_tree, "change", "add", str(entry_path), now=datetime.fromisoformat("2026-10-10T09:00:00+02:00"))
@@ -100,8 +100,8 @@ def test_add_closes_the_seam_behind_the_real_logs_last_entry(record_tree: Path) 
     assert seam.startswith("\n\n## 2026-10-10 — A later change\n")
 
 
-def test_add_on_the_real_log_ends_it_with_one_newline(record_tree: Path) -> None:
-    real_text = (PROJECT_ROOT / "docs/architecture_log.md").read_text(encoding="utf-8")
+def test_add_on_the_sample_log_ends_it_with_one_newline(record_tree: Path) -> None:
+    real_text = SAMPLE_LOG.read_text(encoding="utf-8")
     (record_tree / "docs/architecture_log.md").write_text(real_text, encoding="utf-8")
     entry_path = write_entry_yaml(record_tree.parent, start="2026-10-10", title="A later change", merged=head_sha(record_tree))
     result = run_memento(record_tree, "change", "add", str(entry_path), now=datetime.fromisoformat("2026-10-10T09:00:00+02:00"))
@@ -732,12 +732,11 @@ def test_parse_entry_text_keeps_several_trailing_blank_lines() -> None:
     assert entry.render(width=15) == header + "\n" + "\n".join(body) + "\n"
 
 
-def test_the_real_architecture_log_round_trips_through_changeentry() -> None:
-    text = (PROJECT_ROOT / "docs/architecture_log.md").read_text(encoding="utf-8")
-    real_spec = yaml.safe_load((PROJECT_ROOT / ".claude/memento.yaml").read_text(encoding="utf-8"))["kinds"]["change"]
+def test_the_sample_change_log_round_trips_through_changeentry() -> None:
+    text = SAMPLE_LOG.read_text(encoding="utf-8")
     prefix, raws = split_log(text)
-    entries = [parse_raw_entry(raw, real_spec) for raw in raws]
-    assert prefix + "".join(entry.render(width=real_spec["label_width"]) for entry in entries) == text
+    entries = [parse_raw_entry(raw, spec()) for raw in raws]
+    assert prefix + "".join(entry.render(width=spec()["label_width"]) for entry in entries) == text
 
 
 def test_a_schema_dropping_a_change_field_fails_the_structure_agreement(record_tree: Path) -> None:

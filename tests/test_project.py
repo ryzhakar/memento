@@ -18,7 +18,7 @@ from memento.project import (
     spec_archive_path,
     spec_path,
 )
-from tests.memento.conftest import HISTORY, SCHEMA_PATH, commit_tree, run_memento
+from tests.conftest import HISTORY, SCHEMA_PATH, commit_tree, run_memento
 
 OTHER_HOMES: dict[str, Any] = {
     "kinds": {

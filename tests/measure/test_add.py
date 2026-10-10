@@ -8,8 +8,8 @@ import yaml
 
 from memento.__main__ import CHECKS
 from memento.findings import Corpus, Finding, fail
-from tests.memento.conftest import commit_all, git, replace_once, run_memento
-from tests.memento.measure.conftest import (
+from tests.conftest import commit_all, git, replace_once, run_memento
+from tests.measure.conftest import (
     MEASUREMENT_LOG,
     REPORT_RAW,
     SPEC_DIRECTORY,
@@ -173,7 +173,7 @@ def run_rule_refusals(tree: MeasuredTree) -> list[tuple[dict[str, Any], str]]:
             f"{record}: reads max_rss from a shared process (position 3); a process's high-water mark never decreases, so only a fresh process yields it",
         ),
         (
-            {"argv": ["uv", "run", "matchtuner", "select"], "readings": {"footprint": {"bytes": 9438336, "resolution_bytes": 1}}},
+            {"argv": ["uv", "run", "tool", "select"], "readings": {"footprint": {"bytes": 9438336, "resolution_bytes": 1}}},
             f"{record}: reads footprint, but argv[0] is 'uv', a wrapper; footprint describes the direct child only",
         ),
         (
@@ -268,10 +268,10 @@ def test_code_the_repository_cannot_vouch_for_is_refused(measured: MeasuredTree)
     absent = "f" * 40
     spec = entry_spec(measured, [parsed_item(measured, absent)], design={"fixed": {"code": code(absent)}})
     assert_refused(measured, spec, f"'{absent}' is not a commit in this repository")
-    spec = entry_spec(measured, [parsed_item(measured, measured.old)], paths=["matchtuner/", "matchtuner/selection.py"])
-    assert_refused(measured, spec, f"path 'matchtuner/selection.py' does not exist at {measured.old}")
+    spec = entry_spec(measured, [parsed_item(measured, measured.old)], paths=["tool/", "tool/selection.py"])
+    assert_refused(measured, spec, f"path 'tool/selection.py' does not exist at {measured.old}")
     spec = entry_spec(measured, [parsed_item(measured, measured.old)], subject={"stage": {"command": "run-audit"}})
-    assert_refused(measured, spec, f"stage 'run-audit' is not a matchtuner command at {measured.old} (build-store, score-all, select)")
+    assert_refused(measured, spec, f"stage 'run-audit' is not a tool command at {measured.old} (build-store, score-all, select)")
 
 
 def test_a_stage_the_newer_code_declares_lands_at_that_code(measured: MeasuredTree) -> None:
@@ -279,10 +279,10 @@ def test_a_stage_the_newer_code_declares_lands_at_that_code(measured: MeasuredTr
     assert add_entry(measured, spec).exit_code == 0
 
 
-def test_a_code_state_whose_matchtuner_declares_no_command_is_refused(measured: MeasuredTree) -> None:
+def test_a_code_state_whose_tool_declares_no_command_is_refused(measured: MeasuredTree) -> None:
     first_commit = git(measured.root, "rev-list", "--max-parents=0", "HEAD").strip()
     spec = entry_spec(measured, [parsed_item(measured, first_commit)], paths=["docs/"], design={"fixed": {"code": code(first_commit)}})
-    assert_refused(measured, spec, f"matchtuner/__main__.py at {first_commit} declares no command, so no stage can be checked there")
+    assert_refused(measured, spec, f"tool/__main__.py at {first_commit} declares no command, so no stage can be checked there")
 
 
 def test_entry_and_record_shape_rules_refuse_what_breaks_them(measured: MeasuredTree) -> None:
@@ -329,7 +329,7 @@ def test_a_dirty_code_state_whose_diff_no_longer_hashes_as_recorded_is_refused(m
 
 
 def test_an_operation_whose_harness_is_missing_is_refused(measured: MeasuredTree) -> None:
-    subject = {"operation": {"callable": "matchtuner.selection.draw_selection_pairs", "harness": str(measured.scratch / "measure_panel.py")}}
+    subject = {"operation": {"callable": "tool.selection.draw_selection_pairs", "harness": str(measured.scratch / "measure_panel.py")}}
     assert_refused(measured, entry_spec(measured, [parsed_item(measured, measured.old)], subject=subject), f"harness {measured.scratch / 'measure_panel.py'} is not a file")
     (measured.scratch / "measure_panel.py").write_text("print()\n", encoding="utf-8")
     assert add_entry(measured, entry_spec(measured, [parsed_item(measured, measured.old)], subject=subject)).exit_code == 0
@@ -348,7 +348,7 @@ def test_a_hand_edit_of_a_committed_document_fails_the_check_and_refuses_the_nex
     add_entry(measured, entry_spec(measured, [parsed_item(measured, measured.old)]))
     commit_all(measured.root)
     edited_line = measurement_log(measured).splitlines().index("paths:") + 1
-    replace_once(measured.root, MEASUREMENT_LOG, "paths:\n- matchtuner/\n", "paths: [matchtuner/]\n")
+    replace_once(measured.root, MEASUREMENT_LOG, "paths:\n- tool/\n", "paths: [tool/]\n")
     canonical = f"FAIL  {MEASUREMENT_LOG}:1  is not the block form memento writes; the log is written by 'memento measurement add' and 'void' only"
     assert run_memento(measured.root, "check").stdout.splitlines()[0] == canonical
     message = f"{MEASUREMENT_LOG} is not an extension of HEAD's copy (first difference at line {edited_line}); written lines are never edited"

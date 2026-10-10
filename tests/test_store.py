@@ -10,7 +10,7 @@ import pytest
 
 from memento import Refusal
 from memento.store import RestoreFailed, Store
-from tests.memento.conftest import git
+from tests.conftest import git
 
 LOCK_WAIT_SECONDS = 0.3
 

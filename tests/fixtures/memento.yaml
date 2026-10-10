@@ -1,0 +1,226 @@
+load_levels:
+  self: loads through charter's autoload lines
+  start: read by pat-down at session start
+  need: reached by pointer when task touches it
+  latent: found by search only
+kinds:
+  charter:
+    home: CLAUDE.md
+    tier: charter
+    load: self
+    budget_tokens: 1500
+    verification: owner-stated
+    sections:
+    - Condition
+    - Session start
+    - Goals
+    - Prime directives
+    - Pointers
+    goal_fields:
+    - object
+    - evidence
+    - ground
+    - constraints
+  frame:
+    home: docs/ground-truth.md
+    tier: charter
+    load: self
+    budget_tokens: 3300
+    verification: owner-stated
+  directive:
+    home: docs/conventions.md
+    tier: dossier
+    load: self
+    budget_tokens: 18000
+    verification: grounded
+    headings:
+    - commit & merge
+    - pipeline code
+    - measuring & quoting
+    - running jobs
+    - experiments
+    - reviewing & tests
+    - writing craft
+    - delegating agents
+    - owner
+    labels:
+    - when
+    - do
+    - never
+    - why
+    - ground
+    - except
+    required_labels:
+    - when
+    - do
+    - ground
+    label_width: 8
+  change:
+    home: docs/architecture_log.md
+    tier: journal
+    load: self
+    budget_tokens: 55000
+    verification: held-before-verified
+    fields:
+    - KIND
+    - FROM → TO
+    - WHY
+    - INVALIDATES
+    - EVIDENCE
+    - SUPERSEDED-BY
+    required_fields:
+    - KIND
+    - FROM → TO
+    - WHY
+    - INVALIDATES
+    kind_values:
+    - computed
+    - runnable
+    one_line_fields:
+    - EVIDENCE
+    label_width: 15
+    word_cap: 300
+    aging: the oldest entries move to the archive
+  schema:
+    home: .claude/memento.yaml
+    tier: dossier
+    load: self
+    budget_tokens: 5000
+    verification: owner-stated
+  map:
+    home: .claude/memento-map.md
+    tier: dossier
+    load: start
+    budget_tokens: 1000
+    verification: reconciled
+  fact:
+    home: docs/capabilities.md
+    tier: dossier
+    load: need
+    verification: measured
+  results:
+    home: docs/results.md
+    tier: dossier
+    load: need
+    verification: measured
+    columns:
+    - approach
+    - world
+    - labels
+    - folds
+    - R@P95/fold
+    - P@R10/fold
+    - P@R30/fold
+    - P@R50/fold
+    - bar
+    - run
+    - verdict
+    - date
+  measurement:
+    home: docs/measurements.yaml
+    tier: dossier
+    load: need
+    verification: measured
+  spec:
+    home: docs/specs/
+    tier: dossier
+    load: need
+    verification: grounded
+  deferral:
+    home: docs/user_deferred_items.md
+    tier: dossier
+    load: need
+    verification: owner-stated
+  string_recipes:
+    home: docs/string_comparison_recipes.md
+    tier: dossier
+    load: need
+    verification: measured
+  label_audit:
+    home: docs/label-audit-methodology.md
+    tier: dossier
+    load: need
+    verification: measured
+  label_defects:
+    home: docs/label-data-defects.md
+    tier: dossier
+    load: need
+    verification: measured
+  reference:
+    home: docs/reference/
+    tier: dossier
+    load: latent
+    verification: owner-stated
+  events:
+    home: docs/orchestration_log/history/{date}/events*.md
+    tier: journal
+    load: start
+    verification: witnessed
+    actors:
+    - owner
+    - self
+    - agent:<name>
+    - tool:<name>
+  digest:
+    home: docs/orchestration_log/history/{date}/session*.md
+    tier: journal
+    load: start
+    verification: witnessed
+    close_labels:
+    - HEAD
+    - state
+    - open
+    - next
+    close_label_width: 8
+    state_max_lines: 3
+  failure:
+    home: docs/orchestration_log/history/{date}/failures.md
+    tier: journal
+    load: latent
+    verification: witnessed
+    entry_labels:
+    - What happened
+    - Mechanism
+    - Correction
+  report:
+    home: docs/orchestration_log/history/{date}/
+    tier: journal
+    load: latent
+    verification: witnessed
+  scratch:
+    home: docs/orchestration_log/recon/{date}/
+    tier: bench
+    load: latent
+    disposable: true
+    verification: none
+  archived:
+    home: docs/orchestration_log/archive/
+    tier: archive
+    load: latent
+    verification: none
+events:
+  decision: events
+  discovery: events
+  commitment: events
+  delegation: events
+  receipt: events
+  attenuation: events
+  span-event: events
+  failure: failure
+  change: change
+project:
+  ratified_on: '2026-09-23'
+  main_branch: main
+  record_space: docs/
+  code_roots:
+  - tool/
+  - scripts/
+  - tests/
+  history_start_file: memento.just
+  measured_cli: tool/__main__.py
+  commit_type: docs
+  commit_subject_words: 9
+token_estimate:
+  tokens_per_word: 2.5
+products: []
+retired: []

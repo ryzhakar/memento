@@ -13,7 +13,7 @@ from memento.findings import Check, Corpus, Finding, warn
 from memento.schema import load_corpus
 from memento.git import git_exit_status
 from memento.store import Store
-from tests.memento.conftest import FIXED_NOW, HISTORY, replace_once
+from tests.conftest import FIXED_NOW, HISTORY, replace_once
 
 CAPABILITIES = "docs/capabilities.md"
 CLEAN_CAPABILITIES = "# Capabilities\n\n## Scoring\n\nThe scorer slices its input.\n"

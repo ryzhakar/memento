@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from memento.schema import kind_for
-from tests.memento.conftest import fixture_schema, run_memento
+from tests.conftest import fixture_schema, run_memento
 
 USAGE_ERROR_EXIT_CODE = 2
 
@@ -40,7 +40,7 @@ def test_a_path_resolves_to_the_kind_whose_home_covers_it(path: str, kind: str) 
         f"{HISTORY}/october/events.md",
         f"{HISTORY}/2026-10-08",
         "docs/capabilities.md.bak",
-        "matchtuner/score.py",
+        "tool/score.py",
         "docs/orchestration_log/recon/notes.md",
         "docs/reference",
     ],

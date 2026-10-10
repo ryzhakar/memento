@@ -1,4 +1,4 @@
-"""Record trees shaped by the project's schema, committed in a fresh git repository."""
+"""Record trees shaped by the fixture schema, committed in a fresh git repository."""
 
 import os
 import subprocess
@@ -16,10 +16,9 @@ from memento.findings import Check
 from memento.git import git_exit_status
 from memento.store import Store
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+FIXTURES = Path(__file__).parent / "fixtures"
+FIXTURE_SCHEMA = FIXTURES / "memento.yaml"
 SCHEMA_PATH = ".claude/memento.yaml"
-PROSE_KEYS = ("format", "admission")
-AGING_TEXT = "the oldest entries move to the archive"
 CLOSED_SPAN_DAY = "2026-09-30"
 OPEN_SPAN_DAY = "2026-10-01"
 HISTORY = "docs/orchestration_log/history"
@@ -27,21 +26,8 @@ FIXED_NOW = datetime.fromisoformat("2026-10-01T10:30:42+02:00")
 
 
 def fixture_schema() -> dict[str, Any]:
-    """The project's schema with its prose removed, so the tree owes no pointer to the prose's paths."""
-    real = yaml.safe_load((PROJECT_ROOT / SCHEMA_PATH).read_text(encoding="utf-8"))
-    kinds = {name: {key: value for key, value in spec.items() if key not in PROSE_KEYS} for name, spec in real["kinds"].items()}
-    for spec in kinds.values():
-        if "aging" in spec:
-            spec["aging"] = AGING_TEXT
-    return {
-        "load_levels": real["load_levels"],
-        "kinds": kinds,
-        "events": real["events"],
-        "project": real["project"],
-        "token_estimate": {"tokens_per_word": real["token_estimate"]["tokens_per_word"]},
-        "products": [],
-        "retired": [],
-    }
+    """The schema every fixture tree is built from, read afresh so a test may edit its copy."""
+    return yaml.safe_load(FIXTURE_SCHEMA.read_text(encoding="utf-8"))
 
 
 def charter_text(spec: dict[str, Any]) -> str:

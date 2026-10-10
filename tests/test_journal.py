@@ -16,7 +16,7 @@ from memento.journal_shapes import CLOSE_HEADING, LineKind, entry_text, parse_cl
 from memento.schema import KNOWN_EVENT_ROUTES
 from memento.git import git_exit_status
 from memento.store import Store
-from tests.memento.conftest import FIXED_NOW, HISTORY, PROJECT_ROOT, SCHEMA_PATH, commit_tree, git, replace_once, run_memento
+from tests.conftest import FIXED_NOW, HISTORY, SCHEMA_PATH, commit_tree, fixture_schema, git, replace_once, run_memento
 
 CLOSED_DAY_EVENTS = f"{HISTORY}/2026-09-30/events.md"
 OPEN_DAY = f"{HISTORY}/2026-10-01"
@@ -369,17 +369,17 @@ def test_a_failure_paragraph_left_empty_fails(record_tree: Path) -> None:
     assert check_findings(record_tree) == [f"FAIL  {CLOSED_FAILURES}:3  Correction is empty"]
 
 
-def written_after_ratification(pattern: str) -> list[str]:
-    """The text of every journal file in the repository's history matching a pattern, written after ratification."""
-    ratified_on = yaml.safe_load((PROJECT_ROOT / SCHEMA_PATH).read_text(encoding="utf-8"))["project"]["ratified_on"]
-    return [path.read_text(encoding="utf-8") for path in sorted((PROJECT_ROOT / HISTORY).glob(f"*/{pattern}")) if path.parent.name > ratified_on]
+def written_after_ratification(root: Path, pattern: str) -> list[str]:
+    """The text of every journal file in a tree's history directory matching a pattern, written after ratification."""
+    ratified_on = fixture_schema()["project"]["ratified_on"]
+    return [path.read_text(encoding="utf-8") for path in sorted((root / HISTORY).glob(f"*/{pattern}")) if path.parent.name > ratified_on]
 
 
-def test_every_written_events_line_close_block_and_failure_entry_renders_back_to_itself() -> None:
-    label_width = yaml.safe_load((PROJECT_ROOT / SCHEMA_PATH).read_text(encoding="utf-8"))["kinds"]["digest"]["close_label_width"]
-    lines = [line for text in written_after_ratification("events*.md") for line in text.splitlines()]
-    closes = [entry for text in written_after_ratification("session*.md") for entry in split_entries(text) if entry[1].startswith(CLOSE_HEADING)]
-    failures = [entry for text in written_after_ratification("failures.md") for entry in split_entries(text)]
+def test_every_written_events_line_close_block_and_failure_entry_renders_back_to_itself(record_tree: Path) -> None:
+    label_width = fixture_schema()["kinds"]["digest"]["close_label_width"]
+    lines = [line for text in written_after_ratification(record_tree, "events*.md") for line in text.splitlines()]
+    closes = [entry for text in written_after_ratification(record_tree, "session*.md") for entry in split_entries(text) if entry[1].startswith(CLOSE_HEADING)]
+    failures = [entry for text in written_after_ratification(record_tree, "failures.md") for entry in split_entries(text)]
     assert all((lines, closes, failures))
     assert [line for line in lines if parse_event_line(line).render() != line] == []
     assert [header for _n, header, body in closes if parse_close_block(header, body, label_width).render(label_width) != entry_text(header, body)] == []

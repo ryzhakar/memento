@@ -12,7 +12,7 @@ from memento import Environment
 from memento.__main__ import CHECKS, app
 from memento.git import git_exit_status
 from memento.store import Store
-from tests.memento.conftest import FIXED_NOW, HISTORY, git, replace_once, run_memento
+from tests.conftest import FIXED_NOW, HISTORY, git, replace_once, run_memento
 
 OPEN_EVENTS_FILE = f"{HISTORY}/2026-10-01/events.md"
 
