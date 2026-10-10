@@ -235,7 +235,7 @@ def test_add_refuses_an_entry_file_that_does_not_read(record_tree: Path) -> None
     before = log_text(record_tree)
     result = run_memento(record_tree, "change", "add", str(record_tree.parent / "missing.yaml"))
     assert result.exit_code == 1
-    assert "refused: missing.yaml does not read: No such file or directory" in result.stderr
+    assert "refused: missing.yaml does not read: " in result.stderr
     assert log_text(record_tree) == before
 
 
@@ -245,7 +245,7 @@ def test_add_refuses_an_entry_path_that_is_a_directory(record_tree: Path) -> Non
     before = log_text(record_tree)
     result = run_memento(record_tree, "change", "add", str(directory))
     assert result.exit_code == 1
-    assert "refused: entries does not read: Is a directory" in result.stderr
+    assert "refused: entries does not read: " in result.stderr
     assert log_text(record_tree) == before
 
 
@@ -400,7 +400,7 @@ def test_add_refuses_an_impossible_date_in_another_field_of_the_entry_file(recor
     before = log_text(record_tree)
     result = run_memento(record_tree, "change", "add", str(entry_path))
     assert result.exit_code == 1
-    assert "refused: entry.yaml does not parse: day is out of range for month" in result.stderr
+    assert "refused: 2026-02-30 is not a calendar date" in result.stderr
     assert log_text(record_tree) == before
 
 
@@ -880,7 +880,7 @@ def test_add_refuses_an_entry_key_the_entry_does_not_take(record_tree: Path) -> 
     before = log_text(record_tree)
     result = run_memento(record_tree, "change", "add", str(entry_path))
     assert result.exit_code == 1
-    assert "refused: model: Extra inputs are not permitted" in result.stderr
+    assert "refused: model: " in result.stderr
     assert log_text(record_tree) == before
 
 
@@ -889,7 +889,7 @@ def test_add_refuses_an_entry_value_the_entry_does_not_take(record_tree: Path) -
     before = log_text(record_tree)
     result = run_memento(record_tree, "change", "add", str(entry_path))
     assert result.exit_code == 1
-    assert "refused: invalidates: Input should be a valid list" in result.stderr
+    assert "refused: invalidates: " in result.stderr
     assert log_text(record_tree) == before
 
 
@@ -899,7 +899,7 @@ def test_repair_refuses_an_entry_key_the_entry_does_not_take(record_tree: Path) 
     before = log_text(record_tree)
     result = run_memento(record_tree, "change", "repair", "2026-04-09 — The frozen base changes", str(entry_path))
     assert result.exit_code == 1
-    assert "refused: model: Extra inputs are not permitted" in result.stderr
+    assert "refused: model: " in result.stderr
     assert log_text(record_tree) == before
 
 

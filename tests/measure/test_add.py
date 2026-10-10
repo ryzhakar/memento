@@ -291,9 +291,9 @@ def test_entry_and_record_shape_rules_refuse_what_breaks_them(measured: Measured
     parsed_inline = {"transcribed": run_record(measured.old, parsed_run(measured, EARLY_START, EARLY_END, readings={"wall": "57.78 s"}))}
     assert_refused(measured, entry_spec(measured, [parsed_inline]), "item 1: an inline run is transcribed; a parsed or observed run is a run record file named by 'run_record'")
     no_machine = record_item(measured, "m", {key: value for key, value in run_record(measured.old, parsed_run(measured, EARLY_START, EARLY_END)).items() if key != "machine"})
-    assert_refused(measured, entry_spec(measured, [no_machine]), "item 1: machine: Field required")
+    assert_refused_from(measured, entry_spec(measured, [no_machine]), "item 1: machine:")
     no_code = record_item(measured, "c", {key: value for key, value in run_record(measured.old, parsed_run(measured, EARLY_START, EARLY_END)).items() if key != "code"})
-    assert_refused(measured, entry_spec(measured, [no_code]), "item 1: code: Field required")
+    assert_refused_from(measured, entry_spec(measured, [no_code]), "item 1: code:")
     assert_refused(measured, entry_spec(measured, [{"run_record": "nowhere.yaml"}]), "item 1: nowhere.yaml is not a file")
     late_run = [parsed_item(measured, measured.old, "2026-10-01T10:31:00+02:00", "2026-10-01T10:32:00+02:00")]
     assert_refused(measured, entry_spec(measured, late_run), "item 1 ends 2026-10-01T10:32:00+02:00, after the entry is recorded 2026-10-01T10:30:42+02:00")
@@ -377,7 +377,7 @@ def test_a_log_document_that_does_not_parse_refuses_the_next_append(measured: Me
     (measured.root / MEASUREMENT_LOG).write_text("---\nkind: measurement\n", encoding="utf-8")
     result = add_entry(measured, entry_spec(measured, [parsed_item(measured, measured.old)]))
     assert (result.exit_code, result.stdout) == (1, "")
-    assert result.stderr.startswith("refused: the measurement log's document at line 1 does not parse (measurement.id: Field required;")
+    assert result.stderr.startswith("refused: the measurement log's document at line 1 does not parse (measurement.id:")
 
 
 EVIDENCE = "docs/orchestration_log/recon/2026-10-01/memento-in/entry.yaml:3"
@@ -386,6 +386,24 @@ EVIDENCE = "docs/orchestration_log/recon/2026-10-01/memento-in/entry.yaml:3"
 def void(tree: MeasuredTree, target: str, reason: str = "overlapped an evaluate", evidence: str = EVIDENCE) -> Any:
     """Run `measurement void` on the tree."""
     return run_memento(tree.root, "measurement", "void", target, "--reason", reason, "--evidence", evidence)
+
+
+def assert_refused_from(tree: MeasuredTree, spec: dict[str, Any], prefix: str) -> None:
+    """Assert `measurement add` refuses with a message starting with this memento-owned prefix and leaves the log's bytes untouched."""
+    before = (tree.root / MEASUREMENT_LOG).read_bytes()
+    result = add_entry(tree, spec)
+    assert (result.exit_code, result.stdout) == (1, "")
+    assert result.stderr.startswith(f"refused: {prefix}")
+    assert (tree.root / MEASUREMENT_LOG).read_bytes() == before
+
+
+def assert_void_refused_from(tree: MeasuredTree, prefix: str, target: str, **options: str) -> None:
+    """Assert `measurement void` refuses with a message starting with this memento-owned prefix and leaves the log's bytes untouched."""
+    before = (tree.root / MEASUREMENT_LOG).read_bytes()
+    result = void(tree, target, **options)
+    assert (result.exit_code, result.stdout) == (1, "")
+    assert result.stderr.startswith(f"refused: {prefix}")
+    assert (tree.root / MEASUREMENT_LOG).read_bytes() == before
 
 
 def assert_void_refused(tree: MeasuredTree, message: str, target: str, **options: str) -> None:
@@ -411,7 +429,7 @@ def test_a_void_whose_target_or_evidence_does_not_hold_is_refused(measured: Meas
     add_entry(measured, entry_spec(measured, [parsed_item(measured, measured.old)]))
     assert_void_refused(measured, "void target m-20261001-007 is not a measurement earlier in the log", "m-20261001-007")
     assert_void_refused(measured, "void target m-20261001-001#2 names item 2, but m-20261001-001 holds 1 items", "m-20261001-001#2")
-    assert_void_refused(measured, "target: String should match pattern '^m-\\d{8}-\\d{3}(#[1-9]\\d*)?$'", "m-1#1")
+    assert_void_refused_from(measured, "target:", "m-1#1")
     absent = "f" * 40
     assert_void_refused(measured, f"'{absent}' is not a commit in this repository", "m-20261001-001", evidence=absent)
     assert_void_refused(measured, "evidence docs/missing.md is not a file", "m-20261001-001", evidence="docs/missing.md:1")

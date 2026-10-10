@@ -26,7 +26,7 @@ KIND_FIELD = "KIND"
 CHANGE_LOG_MENTION = "architecture_log.md"
 CHANGE_LOG_POINTER = re.compile(rf"decided ({DATE}), see docs/architecture_log\.md")
 ENTRY_DATE = re.compile(rf"(?m)^## ({DATE})")
-ENTRY_DATE_FIELD = re.compile(rf"(?m)^(?:start|end): (?P<text>{DATE})$")
+ENTRY_DATE_FIELD = re.compile(rf"(?m)^\w+: (?P<text>{DATE})$")
 
 FIELD_LABELS: tuple[str, ...] = ("KIND", "FROM → TO", "WHY", "INVALIDATES", "EVIDENCE", "SUPERSEDED-BY")
 FIELD_ATTRS: tuple[str, ...] = ("kind", "from_to", "why", "invalidates", "evidence", "superseded_by")

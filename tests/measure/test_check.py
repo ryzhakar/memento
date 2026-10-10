@@ -32,17 +32,15 @@ def test_a_log_reformatted_by_hand_fails_the_canonical_check(measured: MeasuredT
 
 def test_a_document_that_does_not_parse_fails_naming_what_it_lacks(measured: MeasuredTree) -> None:
     (measured.root / MEASUREMENT_LOG).write_text("---\nkind: void\nid: m-20261001-001\n", encoding="utf-8")
-    assert findings(measured.root) == [
-        f"FAIL  {MEASUREMENT_LOG}:1  does not parse as a measurement or a void: void.recorded: Field required; void.by: Field required; "
-        "void.target: Field required; void.reason: Field required; void.evidence: Field required"
-    ]
+    [finding] = findings(measured.root)
+    assert finding.startswith(f"FAIL  {MEASUREMENT_LOG}:1  does not parse as a measurement or a void: ")
+    assert all(f"void.{field}: " in finding for field in ("recorded", "by", "target", "reason", "evidence"))
 
 
 def test_text_before_the_first_document_fails_as_a_document_that_does_not_parse(measured: MeasuredTree) -> None:
     (measured.root / MEASUREMENT_LOG).write_text("# measurements\n", encoding="utf-8")
-    assert findings(measured.root) == [
-        f"FAIL  {MEASUREMENT_LOG}:1  does not parse as a measurement or a void: Input should be an object"
-    ]
+    [finding] = findings(measured.root)
+    assert finding.startswith(f"FAIL  {MEASUREMENT_LOG}:1  does not parse as a measurement or a void: ")
 
 
 def test_a_repeated_or_decreasing_id_fails(measured: MeasuredTree) -> None:
