@@ -19,10 +19,11 @@ from memento.measure.types import (
     validated,
 )
 from memento.pointers import home_of
+from memento.project import project_of
 
 MEASUREMENT_KIND = "measurement"
 DOCUMENT_MARK = DOCUMENT_START.rstrip("\n")
-NOT_CANONICAL = "is not the block form memento writes; the log is written by 'just memento measurement add' and 'void' only"
+NOT_CANONICAL = "is not the block form memento writes; the log is written by 'memento measurement add' and 'void' only"
 
 
 def split_documents(text: str) -> list[tuple[int, str]]:
@@ -47,7 +48,7 @@ def logged_documents(text: str) -> list[Measurement | Void]:
         try:
             documents.append(parsed_document(chunk))
         except Refusal as refusal:
-            raise Refusal(f"the measurement log's document at line {number} does not parse ({refusal}); 'just memento check' lists it") from refusal
+            raise Refusal(f"the measurement log's document at line {number} does not parse ({refusal}); 'memento check' lists it") from refusal
     return documents
 
 
@@ -78,7 +79,7 @@ def target_problems(target: str, earlier: Sequence[Measurement | Void]) -> list[
 
 
 def code_problems(entry: Measurement, history: CodeHistory) -> list[str]:
-    """Each code sha that is no commit, each path a sha lacks, and each sha at which the stage is no matchtuner command."""
+    """Each code sha that is no commit, each path a sha lacks, and each sha at which the stage is no command of the project's CLI."""
     problems = []
     for sha in dict.fromkeys(code_sha(code) for code in design_codes(entry.design)):
         if not history.is_commit(sha):
@@ -91,12 +92,12 @@ def code_problems(entry: Measurement, history: CodeHistory) -> list[str]:
 
 
 def stage_problems(command: str, sha: str, history: CodeHistory) -> list[str]:
-    """A stage the matchtuner CLI at sha does not declare, or a sha whose CLI declares no command at all."""
+    """A stage the project's CLI at sha does not declare, or a sha whose CLI declares no command at all."""
     commands = history.stage_commands(sha)
     if not commands:
-        return [f"matchtuner/__main__.py at {sha} declares no command, so no stage can be checked there"]
+        return [f"{history.cli_module} at {sha} declares no command, so no stage can be checked there"]
     if command not in commands:
-        return [f"stage '{command}' is not a matchtuner command at {sha} ({', '.join(sorted(commands))})"]
+        return [f"stage '{command}' is not a {history.cli_name} command at {sha} ({', '.join(sorted(commands))})"]
     return []
 
 
@@ -116,7 +117,7 @@ def document_problems(document: Measurement | Void, earlier: Sequence[Measuremen
 def check_measurement_log(corpus: Corpus) -> Iterator[Finding]:
     """Fail a log document that does not parse, is not canonical, breaks id order or targets, or names code git lacks."""
     path = home_of(corpus, MEASUREMENT_KIND)
-    history = CodeHistory(corpus.root)
+    history = CodeHistory(corpus.root, project_of(corpus.schema).measured_cli)
     earlier: list[Measurement | Void] = []
     for number, chunk in split_documents(corpus.text(path)):
         where = f"{path}:{number}"

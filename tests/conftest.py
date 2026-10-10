@@ -37,6 +37,7 @@ def fixture_schema() -> dict[str, Any]:
         "load_levels": real["load_levels"],
         "kinds": kinds,
         "events": real["events"],
+        "project": real["project"],
         "token_estimate": {"tokens_per_word": real["token_estimate"]["tokens_per_word"]},
         "products": [],
         "retired": [],
@@ -171,7 +172,7 @@ def record_texts(schema: dict[str, Any]) -> dict[str, str]:
         "fact": "# Capabilities\n\n## Scoring\n\nThe scorer slices its input.\n",
         "measurement": "",
     }
-    texts: dict[str, str] = {}
+    texts: dict[str, str] = {schema["project"]["measured_cli"]: "# the project's command line\n"}
     for kind, spec in kinds.items():
         home = spec["home"]
         if "{" in home:
@@ -201,7 +202,7 @@ def build_record_tree(root: Path) -> Path:
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text(text, encoding="utf-8")
-    git(root, "init", "-q")
+    git(root, "init", "-q", "-b", "main")
     commit_all(root)
     return root
 

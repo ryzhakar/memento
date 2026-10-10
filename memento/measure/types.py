@@ -272,13 +272,13 @@ type Env = Annotated[
 
 
 class StageCommand(Frozen):
-    """A matchtuner command."""
+    """A command of the project's CLI."""
 
     command: Text
 
 
 class Stage(Frozen):
-    """A pipeline stage run as its matchtuner command."""
+    """A pipeline stage run as its CLI command."""
 
     stage: StageCommand
 

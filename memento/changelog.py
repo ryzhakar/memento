@@ -15,7 +15,15 @@ from memento.candidate import refuse_new_failures
 from memento.findings import DATE, FAIL, Corpus, Finding, fail, split_entries
 from memento.git import git_exit_status
 from memento.pointers import home_of
-from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, agreeing_schema, load_corpus
+from memento.project import (
+    change_log_archive_path,
+    change_log_mention,
+    change_log_pointer,
+    change_log_pointer_form,
+    home_of_kind,
+    project_of,
+)
+from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, Schema, agreeing_schema, load_corpus
 
 change_group = typer.Typer(no_args_is_help=True, help="The change log: add an entry, supersede one, repair one that fails the check, age the oldest out.")
 
@@ -23,8 +31,6 @@ ENTRY_HEADER = re.compile(rf"^## (?P<start>{DATE})(?: → (?P<end>{DATE}))? — 
 FIELD_LABEL = re.compile(r"^(?P<label>[A-Z][A-Z →-]*[A-Z]):(?P<pad> *)")
 NEVER_COMPRESSED_FIELD = "INVALIDATES"
 KIND_FIELD = "KIND"
-CHANGE_LOG_MENTION = "architecture_log.md"
-CHANGE_LOG_POINTER = re.compile(rf"decided ({DATE}), see docs/architecture_log\.md")
 ENTRY_DATE = re.compile(rf"(?m)^## ({DATE})")
 ENTRY_DATE_FIELD = re.compile(rf"(?m)^\w+: (?P<text>{DATE})$")
 
@@ -34,7 +40,6 @@ ATTR_FOR_LABEL: dict[str, str] = dict(zip(FIELD_LABELS, FIELD_ATTRS))
 CANONICAL_LEADING_BLANK_LINES = 0
 CANONICAL_TRAILING_BLANK_LINES = 1
 CANONICAL_FINAL_TRAILING_BLANK_LINES = 0
-ARCHIVE_HOME = "docs/orchestration_log/archive/architecture_log-{first}--{last}.md"
 
 
 class EntryShapeError(Refusal):
@@ -319,13 +324,13 @@ def refuse_future_date(label: str, value: date | None, today: date) -> None:
         raise Refusal(f"{label} {value.isoformat()} is after today ({today.isoformat()})")
 
 
-def refuse_unmerged_change(root: Path, sha: str) -> None:
-    """Refuse a `merged` sha that git does not know as an ancestor of main."""
-    if git_exit_status(root, "merge-base", "--is-ancestor", sha, "main").returncode != 0:
-        raise Refusal(f"{sha} is not on main; an entry is written after its change is merged")
+def refuse_unmerged_change(root: Path, sha: str, main_branch: str) -> None:
+    """Refuse a `merged` sha that git does not know as an ancestor of the project's main branch."""
+    if git_exit_status(root, "merge-base", "--is-ancestor", sha, main_branch).returncode != 0:
+        raise Refusal(f"{sha} is not on {main_branch}; an entry is written after its change is merged")
 
 
-def change_spec(environment: Environment) -> tuple[Path, Mapping[str, Any], Mapping[str, Any]]:
+def change_spec(environment: Environment) -> tuple[Path, Schema, Mapping[str, Any]]:
     """The root, the schema, and the change kind's own spec, refusing when the schema's change fields disagree with ChangeEntry's."""
     root = environment.store.root
     schema = agreeing_schema(root)
@@ -392,7 +397,7 @@ def entry_input(raw: Mapping[str, Any]) -> NewEntryInput:
 
 def append_entry(environment: Environment, entry_path: Path) -> str:
     """Validate and append one new entry built from entry_path's YAML to the change log, returning its path."""
-    root, _schema, spec = change_spec(environment)
+    root, schema, spec = change_spec(environment)
     raw = read_entry_yaml(entry_path)
     refuse_quoted_date("start", raw.get("start"))
     refuse_quoted_date("end", raw.get("end"))
@@ -408,7 +413,7 @@ def append_entry(environment: Environment, entry_path: Path) -> str:
     today = environment.now().date()
     refuse_future_date("start", entry.start, today)
     refuse_future_date("end", entry.end, today)
-    refuse_unmerged_change(root, data.merged)
+    refuse_unmerged_change(root, data.merged, project_of(schema).main_branch)
     seamed = "" if last is None else with_closing_seam(last).render(width=width)
     new_text = prefix + "".join(raws[:-1]) + seamed + entry.render(width=width)
     with environment.store.transaction() as act:
@@ -436,9 +441,9 @@ def supersede_entry(environment: Environment, target_date_text: str, title_prefi
     return path
 
 
-def retired_entry_line(archive_path: str) -> str:
+def retired_entry_line(schema: Schema, archive_path: str) -> str:
     """The schema `retired` list entry for an aged-out archive file, for `schema amend` to add."""
-    return f"- path: {archive_path}\n  superseded_by: docs/architecture_log.md (current entries)\n"
+    return f"- path: {archive_path}\n  superseded_by: {home_of_kind(schema, 'change')} (current entries)\n"
 
 
 def age_out(environment: Environment) -> tuple[str, str]:
@@ -457,7 +462,7 @@ def age_out(environment: Environment) -> tuple[str, str]:
     if not moved:
         raise Refusal(f"no whole entry can move out of the change log to fit its budget of {budget} tokens")
     moved_entries = [parse_raw_entry(raw, spec) for raw in moved]
-    archive_path = ARCHIVE_HOME.format(first=moved_entries[0].start.isoformat(), last=moved_entries[-1].start.isoformat())
+    archive_path = change_log_archive_path(schema, moved_entries[0].start.isoformat(), moved_entries[-1].start.isoformat())
     if (root / archive_path).exists():
         raise Refusal(f"{archive_path} already exists")
     archive_text = "".join(moved)
@@ -466,7 +471,7 @@ def age_out(environment: Environment) -> tuple[str, str]:
         refuse_new_failures(environment, {path: new_log_text, archive_path: archive_text})
         act.replace(path, new_log_text)
         act.replace(archive_path, archive_text)
-    return archive_path, retired_entry_line(archive_path)
+    return archive_path, retired_entry_line(schema, archive_path)
 
 
 def header_index(raws: Sequence[str], header_prefix: str) -> int:
@@ -555,15 +560,16 @@ def check_change_log(corpus: Corpus) -> Iterator[Finding]:
 
 
 def check_change_log_pointers(corpus: Corpus) -> Iterator[Finding]:
-    """Fail the fact record reaching the change log other than as 'decided YYYY-MM-DD, see docs/architecture_log.md'."""
+    """Fail the fact record reaching the change log other than as 'decided YYYY-MM-DD, see <change log home>'."""
     entry_dates = set(ENTRY_DATE.findall(corpus.text(home_of(corpus, "change"))))
     fact = home_of(corpus, "fact")
+    mention, pointer = change_log_mention(corpus.schema), change_log_pointer(corpus.schema)
     for number, line in enumerate(corpus.text(fact).splitlines(), 1):
         where = f"{fact}:{number}"
-        mentions = line.count(CHANGE_LOG_MENTION)
-        pointers = CHANGE_LOG_POINTER.findall(line)
+        mentions = line.count(mention)
+        pointers = pointer.findall(line)
         if mentions > len(pointers):
-            yield fail(where, "cites the change log other than as 'decided YYYY-MM-DD, see docs/architecture_log.md'")
+            yield fail(where, f"cites the change log other than as '{change_log_pointer_form(corpus.schema)}'")
         for date_text in pointers:
             if date_text not in entry_dates:
                 yield fail(where, f"points at a change-log entry dated {date_text}; none exists")
@@ -572,13 +578,13 @@ def check_change_log_pointers(corpus: Corpus) -> Iterator[Finding]:
 @change_group.command(
     "add",
     help=(
-        "Append one entry to docs/architecture_log.md, built from <entry-yaml>'s start, end, title, kind, from_to, "
+        "Append one entry to the change log (the change kind's home), built from <entry-yaml>'s start, end, title, kind, from_to, "
         "why, invalidates, evidence and merged fields, fields rendered in schema order. Reads .claude/memento.yaml, "
         "the last entry of the change log and <entry-yaml>; prints the path written. Refuses: an entry-yaml that does "
         "not read, is not UTF-8, is not valid YAML or is not a mapping with text keys; a start or end that is not a "
         "calendar date or is quoted; over word_cap words outside INVALIDATES; a start before the last entry's; a last "
         "entry that does not parse; a start or end after today; a merged sha that git does not know as an ancestor of "
-        "main; EVIDENCE spanning more than one line; a schema whose change fields differ from memento's; a candidate "
+        "the project's main branch; EVIDENCE spanning more than one line; a schema whose change fields differ from memento's; a candidate "
         "FAIL; a worktree."
     ),
 )
@@ -618,7 +624,7 @@ def supersede(
     "age",
     help=(
         "Move the change log's oldest whole entries, unedited, into "
-        "docs/orchestration_log/archive/architecture_log-<first>--<last>.md until the log is under its budget_tokens, "
+        "<archived home>/<change log name>-<first>--<last>.md until the log is under its budget_tokens, "
         "in one act. Reads .claude/memento.yaml and the entries it moves; prints the archive path and the schema "
         "`retired` line for the owner to add. Refuses: the log already under budget; an archive file that already "
         "exists; no whole entry whose move brings the log under budget; a moved entry that does not parse; a schema whose "

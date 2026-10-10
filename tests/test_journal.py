@@ -13,7 +13,6 @@ from memento import Environment
 from memento.__main__ import CHECKS, app
 from memento.findings import split_entries
 from memento.journal_shapes import CLOSE_HEADING, LineKind, entry_text, parse_close_block, parse_event_line, parse_failure_entry
-from memento.journal_spans import RATIFIED_ON
 from memento.schema import KNOWN_EVENT_ROUTES
 from memento.git import git_exit_status
 from memento.store import Store
@@ -151,7 +150,7 @@ def test_a_paragraph_starting_as_an_entry_heading_is_refused(record_tree: Path) 
 
 def test_a_paragraph_with_no_open_span_is_refused(record_tree: Path) -> None:
     close_open_span(record_tree)
-    assert_refused_landing_nothing(record_tree, "no span is open; 'just memento events open <what>'", "digest", "add", "late")
+    assert_refused_landing_nothing(record_tree, "no span is open; 'memento events open <what>'", "digest", "add", "late")
 
 
 def short_head(root: Path) -> str:
@@ -188,7 +187,7 @@ def test_a_close_block_lands_after_the_spans_narrative(record_tree: Path) -> Non
 
 def test_closing_with_no_open_span_is_refused(record_tree: Path) -> None:
     close_open_span(record_tree)
-    assert_refused_landing_nothing(record_tree, "no span is open; 'just memento events open <what>'", "digest", "close", "s", "o", "n")
+    assert_refused_landing_nothing(record_tree, "no span is open; 'memento events open <what>'", "digest", "close", "s", "o", "n")
 
 
 def test_a_state_over_the_schemas_line_limit_is_refused(record_tree: Path) -> None:
@@ -275,7 +274,7 @@ def test_a_failure_title_already_in_the_failures_file_is_refused(record_tree: Pa
 
 def test_a_failure_with_no_open_span_is_refused(record_tree: Path) -> None:
     close_open_span(record_tree)
-    assert_refused_landing_nothing(record_tree, "no span is open; 'just memento events open <what>'", "failure", "add", *FAILURE_PARTS)
+    assert_refused_landing_nothing(record_tree, "no span is open; 'memento events open <what>'", "failure", "add", *FAILURE_PARTS)
 
 
 def test_a_fault_between_the_failures_two_writes_leaves_both_files_as_they_were(record_tree: Path) -> None:
@@ -372,7 +371,8 @@ def test_a_failure_paragraph_left_empty_fails(record_tree: Path) -> None:
 
 def written_after_ratification(pattern: str) -> list[str]:
     """The text of every journal file in the repository's history matching a pattern, written after ratification."""
-    return [path.read_text(encoding="utf-8") for path in sorted((PROJECT_ROOT / HISTORY).glob(f"*/{pattern}")) if path.parent.name > RATIFIED_ON]
+    ratified_on = yaml.safe_load((PROJECT_ROOT / SCHEMA_PATH).read_text(encoding="utf-8"))["project"]["ratified_on"]
+    return [path.read_text(encoding="utf-8") for path in sorted((PROJECT_ROOT / HISTORY).glob(f"*/{pattern}")) if path.parent.name > ratified_on]
 
 
 def test_every_written_events_line_close_block_and_failure_entry_renders_back_to_itself() -> None:
@@ -596,3 +596,16 @@ def test_closing_where_head_names_no_commit_is_refused(record_tree: Path) -> Non
     git(record_tree, "checkout", "-q", "--orphan", "unborn")
     message = "HEAD names no commit yet; git status has nothing to measure against"
     assert_refused_landing_nothing(record_tree, message, "digest", "close", "s", "o", "n", now=FIXED_NOW)
+
+
+def test_the_file_the_project_block_names_starts_the_append_only_history(record_tree: Path) -> None:
+    replace_once(record_tree, ".claude/memento.yaml", "history_start_file: memento.just\n", "history_start_file: recipes.just\n")
+    commit_tree(record_tree, "name the recipes file")
+    (record_tree / "recipes.just").write_text("check:\n", encoding="utf-8")
+    git(record_tree, "add", "recipes.just")
+    git(record_tree, "commit", "-q", "--date=2026-10-01T12:00:00", "-m", "recipes")
+    replace_once(record_tree, CLOSED_DAY_EVENTS, "2026-09-30T09:05 | owner | decision | the fixture is decided\n", "")
+    sha = commit_tree(record_tree, "drop a line")
+    assert check_findings(record_tree) == [
+        f"FAIL  {CLOSED_DAY_EVENTS}  commit {sha[:8]} removes a written line: '2026-09-30T09:05 | owner | decision | the fixture is decided'"
+    ]

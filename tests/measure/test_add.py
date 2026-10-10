@@ -349,7 +349,7 @@ def test_a_hand_edit_of_a_committed_document_fails_the_check_and_refuses_the_nex
     commit_all(measured.root)
     edited_line = measurement_log(measured).splitlines().index("paths:") + 1
     replace_once(measured.root, MEASUREMENT_LOG, "paths:\n- matchtuner/\n", "paths: [matchtuner/]\n")
-    canonical = f"FAIL  {MEASUREMENT_LOG}:1  is not the block form memento writes; the log is written by 'just memento measurement add' and 'void' only"
+    canonical = f"FAIL  {MEASUREMENT_LOG}:1  is not the block form memento writes; the log is written by 'memento measurement add' and 'void' only"
     assert run_memento(measured.root, "check").stdout.splitlines()[0] == canonical
     message = f"{MEASUREMENT_LOG} is not an extension of HEAD's copy (first difference at line {edited_line}); written lines are never edited"
     assert_refused(measured, entry_spec(measured, [parsed_item(measured, measured.old)]), message)

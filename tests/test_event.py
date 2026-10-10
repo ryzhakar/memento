@@ -36,9 +36,9 @@ def assert_refused(root: Path, message: str, *args: str, now: datetime = FIXED_N
 @pytest.mark.parametrize(
     ("kind", "message"),
     [
-        ("span-event", "span-event lines are written by 'just memento events open' or 'just memento digest close'"),
-        ("failure", "a failure is written by 'just memento failure add', which writes its entry and its events line together"),
-        ("change", "change goes to the change log: 'just memento change add'"),
+        ("span-event", "span-event lines are written by 'memento events open' or 'memento digest close'"),
+        ("failure", "a failure is written by 'memento failure add', which writes its entry and its events line together"),
+        ("change", "change goes to the change log: 'memento change add'"),
         ("decided", "'decided' is not an event kind (decision, discovery, commitment, delegation, receipt, attenuation)"),
     ],
 )
@@ -84,14 +84,14 @@ def append_to_open_events_file(root: Path, line: str) -> None:
 def test_an_event_after_the_span_closed_is_refused(record_tree: Path) -> None:
     append_to_open_events_file(record_tree, "2026-10-01T09:20 | self | span-event | close; HEAD abc1234 (clean); next: rest")
     append_to_open_events_file(record_tree, "2026-10-01T09:25 | self | span-event | pat-down found the span closed")
-    assert_refused(record_tree, "no span is open; 'just memento events open <what>'", "self", "decision", "x")
+    assert_refused(record_tree, "no span is open; 'memento events open <what>'", "self", "decision", "x")
 
 
 def test_an_event_with_no_events_file_under_history_is_refused(record_tree: Path) -> None:
     for events_file in (record_tree / HISTORY).glob("*/events.md"):
         events_file.unlink()
     result = run_memento(record_tree, "events", "add", "self", "decision", "x")
-    assert (result.exit_code, result.stdout, result.stderr) == (1, "", "refused: no span is open; 'just memento events open <what>'\n")
+    assert (result.exit_code, result.stdout, result.stderr) == (1, "", "refused: no span is open; 'memento events open <what>'\n")
 
 
 def test_a_span_event_neither_opening_nor_closing_leaves_the_span_open(record_tree: Path) -> None:

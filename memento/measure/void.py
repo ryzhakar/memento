@@ -13,6 +13,7 @@ from memento.measure.check import MEASUREMENT_KIND, document_problems, logged_do
 from memento.measure.ids import next_id
 from memento.measure.stages import CodeHistory
 from memento.measure.types import Void, canonical_text, validated
+from memento.project import project_of
 from memento.schema import agreeing_schema
 
 VOID_KIND = "void"
@@ -37,14 +38,15 @@ def record_void(environment: Environment, target: str, reason: str, evidence: st
     """Append one void naming its target, reason and evidence to the measurement log, returning the log's path and the void's id."""
     root = environment.store.root
     with environment.store.transaction() as act:
-        log_path = agreeing_schema(root)["kinds"][MEASUREMENT_KIND]["home"]
+        schema = agreeing_schema(root)
+        log_path = schema["kinds"][MEASUREMENT_KIND]["home"]
         log_text = (root / log_path).read_text(encoding="utf-8")
         earlier = logged_documents(log_text)
         recorded = environment.now().replace(microsecond=0)
         fields = {"target": target, "reason": reason, "evidence": evidence, "by": Self_().render()}
         identity = {"kind": VOID_KIND, "id": next_id((document.id for document in earlier), recorded), "recorded": recorded.isoformat()}
         void = validated(VOID, identity | fields)
-        problems = document_problems(void, earlier, CodeHistory(root))
+        problems = document_problems(void, earlier, CodeHistory(root, project_of(schema).measured_cli))
         if problems:
             raise Refusal("; ".join(problems))
         refuse_missing_evidence_line(root, void.evidence)

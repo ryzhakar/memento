@@ -53,6 +53,7 @@ from memento.measure.types import (
     loaded_yaml,
     validated,
 )
+from memento.project import project_of
 from memento.schema import agreeing_schema
 
 MEMORY_UNITS = {"B": 1, "kB": 10**3, "MB": 10**6, "GB": 10**9, "KiB": 2**10, "MiB": 2**20, "GiB": 2**30}
@@ -443,7 +444,8 @@ def record_measurement(environment: Environment, spec_path: str) -> tuple[str, s
     """Append one entry built from an entry spec to the measurement log, returning the log's path and the entry's id."""
     root = environment.store.root
     with environment.store.transaction() as act:
-        log_path = agreeing_schema(root)["kinds"][MEASUREMENT_KIND]["home"]
+        schema = agreeing_schema(root)
+        log_path = schema["kinds"][MEASUREMENT_KIND]["home"]
         log_text = (root / log_path).read_text(encoding="utf-8")
         earlier = logged_documents(log_text)
         spec = validated(ENTRY_SPEC, read_yaml(root, spec_path))
@@ -451,7 +453,7 @@ def record_measurement(environment: Environment, spec_path: str) -> tuple[str, s
         recorded = environment.now().replace(microsecond=0)
         entry = assembled_entry(spec, records, next_id((document.id for document in earlier), recorded), recorded)
         refuse_missing_harness(root, entry)
-        problems = document_problems(entry, earlier, CodeHistory(root))
+        problems = document_problems(entry, earlier, CodeHistory(root, project_of(schema).measured_cli))
         if problems:
             raise Refusal("; ".join(problems))
         document = canonical_text(entry)
@@ -472,7 +474,7 @@ def prefixed_item_record(root: Path, position: int, item: RunRecordPath | Inline
 
 def add_command(
     ctx: typer.Context,
-    entry_spec: str = typer.Argument(..., help="Block-form YAML entry spec, under docs/orchestration_log/recon/<date>/memento-in/."),
+    entry_spec: str = typer.Argument(..., help="Block-form YAML entry spec, a scratch file outside the committed records."),
 ) -> None:
     """Append one entry built from an entry spec to the measurement log."""
     with refusals_reported():

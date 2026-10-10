@@ -25,7 +25,7 @@ PATDOWN_HELP = (
     "Pat down the records: print the baseline (the newest close block), the events tail (the newest span from its last "
     "span-event line), the found state (HEAD with the paths git reports changed, and whether a span is open), and the "
     "anomalies against the baseline: each commit since the baseline's HEAD, each changed path added or gone since it, "
-    "a span open since it closed, and the count of FAIL findings 'just memento check' reports. Reads "
+    "a span open since it closed, and the count of FAIL findings 'memento check' reports. Reads "
     ".claude/memento.yaml, every record, and git. Writes nothing. Refuses only a repository whose HEAD names no commit."
 )
 

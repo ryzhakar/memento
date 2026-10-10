@@ -909,3 +909,11 @@ def test_supersede_refuses_a_title_that_matches_an_entry_of_another_date(record_
     assert result.exit_code == 1
     assert "refused: no entry dated 2026-05-01 with title starting 'The frozen base'" in result.stderr
     assert log_text(record_tree) == before
+
+
+def test_add_names_the_main_branch_the_project_block_declares(record_tree: Path) -> None:
+    replace_once(record_tree, ".claude/memento.yaml", "main_branch: main\n", "main_branch: trunk\n")
+    entry_path = write_entry_yaml(record_tree.parent, start="2026-09-30", title="Unmerged", merged=head_sha(record_tree))
+    result = run_memento(record_tree, "change", "add", str(entry_path))
+    assert result.exit_code == 1
+    assert f"refused: {head_sha(record_tree)} is not on trunk; an entry is written after its change is merged" in result.stderr

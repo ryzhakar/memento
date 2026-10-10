@@ -21,8 +21,6 @@ from memento.journal_shapes import (
     state_overrun,
 )
 from memento.journal_spans import (
-    HISTORY_GLOB,
-    RATIFIED_ON,
     SPAN_CLOSING,
     SPAN_MARK_END,
     SPAN_OPENING,
@@ -30,6 +28,7 @@ from memento.journal_spans import (
     session_file_for,
     span_marks,
 )
+from memento.project import history_glob, project_of
 from memento.schema import SCHEMA_HOME
 
 
@@ -38,7 +37,8 @@ SHORT_SHA_WIDTH = 8
 
 def written_after_ratification(corpus: Corpus, pattern: str) -> list[str]:
     """Journal files the current formats govern; those standing at ratification keep the shape they had."""
-    return [path for path in corpus.glob(f"{HISTORY_GLOB}/{pattern}") if PurePosixPath(path).parent.name > RATIFIED_ON]
+    ratified_on = project_of(corpus.schema).ratified_on
+    return [path for path in corpus.glob(f"{history_glob(corpus.schema)}/{pattern}") if PurePosixPath(path).parent.name > ratified_on]
 
 
 def check_event_lines(corpus: Corpus) -> Iterator[Finding]:
@@ -118,7 +118,7 @@ def check_spans_closed_in_digest(corpus: Corpus) -> Iterator[Finding]:
 
 def check_journal_history(corpus: Corpus) -> Iterator[Finding]:
     """Fail what the journal's history since the memento recipes first landed holds: a removed written line, then a span opened or closed out of turn."""
-    start = history_start(corpus.root)
+    start = history_start(corpus.root, project_of(corpus.schema).history_start_file)
     if start is None:
         return
     yield from removed_line_findings(corpus, start)

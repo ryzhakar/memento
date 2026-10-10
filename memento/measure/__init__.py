@@ -14,7 +14,7 @@ measurement_group.command(
         "Build one entry from an entry spec (question, subject, paths, data, design, items, supersedes; each item a "
         "'run_record: <file>' the run or log verb wrote, or a 'transcribed:' run or summary written inline with text "
         "readings such as '17.27 GB'), lift machine and env from the items, validate it, allocate its id m-YYYYMMDD-NNN, "
-        "and append it to docs/measurements.yaml. Reads .claude/memento.yaml, the log, the spec, its run records, and git "
+        "and append it to the measurement log. Reads .claude/memento.yaml, the log, the spec, its run records, and git "
         "at every code sha. Prints '<log>: <id>'. Refuses: a reading with no unit, a unit or number its raw text lacks, a "
         "number its raw text prints only beside other closed units (a unit printed apart from its number, as in a "
         "separate table column, is accepted), or one finer than the print beside its unit; a run record's reading its raw "
@@ -28,7 +28,7 @@ measurement_group.command(
         "under a wrapper argv[0], swap_growth or scratch_peak on a run not observed, sampled_rss_max whose raw text "
         "states no interval, span_wall or throughput whose raw text has no line naming its span or quantity with a "
         "number); a slept valid run; a level with no item, or an item off the design's levels; a run record file holding "
-        "a transcription, or an inline run that is none; a missing operation harness; a stage the matchtuner CLI at a "
+        "a transcription, or an inline run that is none; a missing operation harness; a stage the project's CLI at a "
         "code sha lacks; a path missing at a code sha; a sha that is no commit; a supersedes id not earlier in the log; a "
         "day with no id left; a worktree; a change adding a records FAIL."
     ),
@@ -36,7 +36,7 @@ measurement_group.command(
 measurement_group.command(
     "void",
     help=(
-        "Append a void to docs/measurements.yaml: a later finding that an earlier entry (m-YYYYMMDD-NNN) or its k-th "
+        "Append a void to the measurement log: a later finding that an earlier entry (m-YYYYMMDD-NNN) or its k-th "
         "item (m-YYYYMMDD-NNN#k) does not stand, with its reason and its evidence. Reads .claude/memento.yaml, the log "
         "and the evidence. Prints '<log>: <id>'. Refuses: a target that is not an earlier measurement or an item it "
         "lacks; evidence that is neither path:line within an existing file nor a commit sha; a reason that is not one "

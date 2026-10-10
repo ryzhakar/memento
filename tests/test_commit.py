@@ -70,7 +70,7 @@ def test_a_subject_of_two_lines_is_refused(committing_tree: Path) -> None:
 
 def test_records_holding_a_failing_finding_are_refused(committing_tree: Path) -> None:
     replace_once(committing_tree, "docs/results.md", "2026-10-01", "October")
-    assert_commit_refused(committing_tree, "the records hold 1 FAIL; 'just memento check' lists them", "subject", OPEN_EVENTS_FILE)
+    assert_commit_refused(committing_tree, "the records hold 1 FAIL; 'memento check' lists them", "subject", OPEN_EVENTS_FILE)
 
 
 def test_a_commit_from_a_linked_worktree_is_refused(committing_tree: Path, tmp_path: Path) -> None:
@@ -96,3 +96,14 @@ def test_a_commit_git_rejects_is_refused_and_leaves_nothing_staged(committing_tr
     hook.chmod(0o755)
     message = "git did not commit, so the records are unstaged: the hook rejects this commit"
     assert_commit_refused(committing_tree, message, "subject", OPEN_EVENTS_FILE)
+
+
+def test_the_commit_type_and_the_subject_word_cap_come_from_the_project_block(committing_tree: Path) -> None:
+    replace_once(committing_tree, ".claude/memento.yaml", "commit_type: docs\n", "commit_type: chore\n")
+    replace_once(committing_tree, ".claude/memento.yaml", "commit_subject_words: 9\n", "commit_subject_words: 2\n")
+    committed = run_memento(committing_tree, "commit", "two words", OPEN_EVENTS_FILE, ".claude/memento.yaml")
+    sha = git(committing_tree, "rev-parse", "--short", "HEAD").strip()
+    assert (committed.exit_code, committed.stdout) == (0, f"{sha} chore: two words\n{OPEN_EVENTS_FILE}\n.claude/memento.yaml\n")
+    assert git(committing_tree, "log", "-1", "--format=%B") == "chore: two words\n\n"
+    run_memento(committing_tree, "events", "add", "self", "decision", "again")
+    assert_commit_refused(committing_tree, "subject runs 3 words, over 2", "three whole words", OPEN_EVENTS_FILE)

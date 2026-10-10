@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from tests.memento.conftest import git, replace_once, run_memento
+from tests.memento.conftest import commit_all, git, replace_once, run_memento
 from tests.memento.measure.conftest import MEASUREMENT_LOG, MeasuredTree, add_entry, code, entry_spec, measurement_log, parsed_run, record_item, run_record
 
 FIRST_START = "2026-10-01T09:00:00+02:00"
@@ -26,7 +26,7 @@ def test_a_log_reformatted_by_hand_fails_the_canonical_check(measured: MeasuredT
     logged_entry(measured)
     replace_once(measured.root, MEASUREMENT_LOG, "paths:\n- matchtuner/\n", "paths: [matchtuner/]\n")
     assert findings(measured.root) == [
-        f"FAIL  {MEASUREMENT_LOG}:1  is not the block form memento writes; the log is written by 'just memento measurement add' and 'void' only"
+        f"FAIL  {MEASUREMENT_LOG}:1  is not the block form memento writes; the log is written by 'memento measurement add' and 'void' only"
     ]
 
 
@@ -92,3 +92,16 @@ def test_a_code_state_declaring_no_matchtuner_command_fails(measured: MeasuredTr
     assert findings(measured.root) == [
         f"FAIL  {MEASUREMENT_LOG}:1  matchtuner/__main__.py at {first_commit} declares no command, so no stage can be checked there"
     ]
+
+
+def test_stages_are_checked_against_the_cli_module_the_project_block_names(measured: MeasuredTree) -> None:
+    logged_entry(measured)
+    replace_once(measured.root, ".claude/memento.yaml", "measured_cli: matchtuner/__main__.py\n", "measured_cli: tool/__main__.py\n")
+    (measured.root / "tool").mkdir()
+    (measured.root / "tool/__main__.py").write_text('import typer\n\napp = typer.Typer()\n\n\n@app.command("other")\ndef other() -> None:\n    """Other."""\n', encoding="utf-8")
+    commit_all(measured.root)
+    head = git(measured.root, "rev-parse", "HEAD").strip()
+    assert findings(measured.root) == [f"FAIL  {MEASUREMENT_LOG}:1  tool/__main__.py at {measured.old} declares no command, so no stage can be checked there"]
+    replace_once(measured.root, MEASUREMENT_LOG, f"sha: {measured.old}", f"sha: {head}")
+    replace_once(measured.root, MEASUREMENT_LOG, "- matchtuner/\n", "- tool/\n")
+    assert findings(measured.root) == [f"FAIL  {MEASUREMENT_LOG}:1  stage 'select' is not a tool command at {head} (other)"]

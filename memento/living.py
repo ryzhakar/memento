@@ -1,4 +1,4 @@
-"""Living records, corrected in place: charter, map, conventions, results, capabilities, recipes and specs."""
+"""Living records, corrected in place: charter, map, directives, results, facts, recipes and specs."""
 
 import re
 from collections.abc import Callable, Iterator, Mapping
@@ -15,9 +15,10 @@ from memento import Environment, Refusal, construct, refusals_reported
 from memento.candidate import refuse_new_failures
 from memento.findings import DATE, SHA, Corpus, Finding, fail
 from memento.pointers import ground_findings, home_of
-from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, home_pattern, load_corpus
+from memento.project import config_space, journal_space, project_of, spec_archive_path, spec_path
+from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, Schema, home_pattern, load_corpus
 
-directive_group = typer.Typer(no_args_is_help=True, help="Conventions: add, replace or drop a rule.")
+directive_group = typer.Typer(no_args_is_help=True, help="Directives: add, replace or drop a rule.")
 results_group = typer.Typer(no_args_is_help=True, help="Results: add, replace or drop a contender's row.")
 fact_group = typer.Typer(no_args_is_help=True, help="Capabilities: replace one exact passage.")
 string_recipes_group = typer.Typer(no_args_is_help=True, help="String-comparison recipes: replace one exact passage.")
@@ -36,18 +37,15 @@ COMPLETION_FIELD = "evidence"
 FINITE = "finite"
 STANDING = "standing"
 DIRECTIVE_WIDTH = 8
-RECORD_SPACE_ROOT = "docs/"
-JOURNAL_SPACE_ROOT = "docs/orchestration_log/"
-CONFIG_SPACE_ROOT = ".claude/"
 TEMPLATE_HOME_MARKS = "{*"
 DIRECTORY_MARK = "/"
 
 
-def in_record_space(path: str) -> bool:
+def in_record_space(schema: Schema, path: str) -> bool:
     """Whether a tracked path sits where only records, products and retired paths may live."""
-    in_docs = path.startswith(RECORD_SPACE_ROOT) and not path.startswith(JOURNAL_SPACE_ROOT)
+    in_docs = path.startswith(project_of(schema).record_space) and not path.startswith(journal_space(schema))
     at_root = DIRECTORY_MARK not in path and path.endswith(".md")
-    in_config = path.startswith(CONFIG_SPACE_ROOT) and path.count(DIRECTORY_MARK) == 1
+    in_config = path.startswith(config_space(schema)) and path.count(DIRECTORY_MARK) == 1
     return in_docs or at_root or in_config
 
 
@@ -87,7 +85,7 @@ def check_map(corpus: Corpus) -> Iterator[Finding]:
     products = [entry["path"] for entry in corpus.schema.get("products", [])]
     retired = [entry["path"] for entry in corpus.schema.get("retired", [])]
     for path in corpus.tracked:
-        if not in_record_space(path):
+        if not in_record_space(corpus.schema, path):
             continue
         covered = any(home_pattern(home).fullmatch(path) for home in homes)
         covered = covered or any(path == product or (product.endswith(DIRECTORY_MARK) and path.startswith(product)) for product in products)
@@ -134,7 +132,7 @@ def check_charter(corpus: Corpus) -> Iterator[Finding]:
 
 
 def directive_blocks(text: str) -> tuple[list[str], list[tuple[int, str, list[tuple[int, str]]]]]:
-    """The conventions' section headings, lowercased, and each rule block with its numbered non-blank lines."""
+    """The directive record's section headings, lowercased, and each rule block with its numbered non-blank lines."""
     headings: list[str] = []
     blocks: list[tuple[int, str, list[tuple[int, str]]]] = []
     block = None
@@ -222,7 +220,7 @@ def refuse_unfit_value(kind: str, name: str, text: str, admit: Callable[[str], s
 
 
 class DirectiveRule(BaseModel):
-    """One conventions rule's labelled body, in the schema's label order."""
+    """One directive rule's labelled body, in the schema's label order."""
 
     model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
     when: str
@@ -279,7 +277,7 @@ def labelled_lines(rule_lines: list[tuple[int, str]], width: int) -> tuple[dict[
 
 
 def check_directives(corpus: Corpus) -> Iterator[Finding]:
-    """Fail conventions headings, rule ids, label lines, label values and grounds that break the schema's directive shape."""
+    """Fail directive headings, rule ids, label lines, label values and grounds that break the schema's directive shape."""
     spec = corpus.schema["kinds"]["directive"]
     path = home_of(corpus, "directive")
     width = spec["label_width"]
@@ -635,17 +633,12 @@ def results_drop(environment: Environment, approach: str, world: str) -> str:
     return path
 
 
-def spec_path(name: str) -> str:
-    """The project-relative home one spec's name resolves to."""
-    return f"docs/specs/{name}.md"
-
-
 def spec_add(environment: Environment, name: str, draft_path: str) -> str:
     """Add a new spec from a draft file's bytes, refusing a name outside the schema's pattern or an existing spec."""
     if not RULE_ID.fullmatch(name):
         raise Refusal(f"spec name '{name}' is not lowercase words joined by hyphens")
-    path = spec_path(name)
     corpus = load_corpus(environment.store.root)
+    path = spec_path(corpus.schema, name)
     if corpus.exists(path):
         raise Refusal(f"'{path}' already exists")
     try:
@@ -660,11 +653,11 @@ def spec_add(environment: Environment, name: str, draft_path: str) -> str:
 
 def spec_archive(environment: Environment, name: str) -> tuple[str, str]:
     """Move a spec whole to the archive, dated by today, refusing when it is absent or the destination exists."""
-    path = spec_path(name)
     corpus = load_corpus(environment.store.root)
+    path = spec_path(corpus.schema, name)
     if not corpus.exists(path):
         raise Refusal(f"'{path}' does not exist")
-    archive_path = f"docs/orchestration_log/archive/spec-{name}-{environment.now().date().isoformat()}.md"
+    archive_path = spec_archive_path(corpus.schema, name, environment.now().date().isoformat())
     if corpus.exists(archive_path):
         raise Refusal(f"'{archive_path}' already exists")
     text = corpus.text(path)
@@ -678,8 +671,8 @@ def spec_archive(environment: Environment, name: str) -> tuple[str, str]:
 @directive_group.command(
     "add",
     help=(
-        "Add a new rule at the end of its heading's section in docs/conventions.md, from a block-form YAML file "
-        "naming id, heading, when, do, never, why, ground and except. Prints 'docs/conventions.md: <id>'. Refuses: "
+        "Add a new rule at the end of its heading's section in the directive record, from a block-form YAML file "
+        "naming id, heading, when, do, never, why, ground and except. Prints '<directive home>: <id>'. Refuses: "
         "a file that does not read, is not UTF-8, is not valid YAML or is not a mapping; a key that is not text; "
         "a missing or non-text id or heading; a label that is not a rule label; a required label (when, do, "
         "ground) is missing; a label value that is not text; a label value that is empty, blank or carries a line "
@@ -689,7 +682,7 @@ def spec_archive(environment: Environment, name: str) -> tuple[str, str]:
     ),
 )
 def directive_add_command(ctx: typer.Context, rule: str = typer.Argument(..., help="Path to the rule.yaml file.")) -> None:
-    """Add a new conventions rule from a rule.yaml file."""
+    """Add a new directive rule from a rule.yaml file."""
     with refusals_reported():
         path, rule_id = directive_add(ctx.obj, rule)
     typer.echo(f"{path}: {rule_id}")
@@ -699,12 +692,12 @@ def directive_add_command(ctx: typer.Context, rule: str = typer.Argument(..., he
     "replace",
     help=(
         "Replace the rule this id names with a rule.yaml file's content, moved to a new heading's section when its "
-        "heading changed. Prints 'docs/conventions.md: <id>'. Refuses: the id does not exist; any refusal 'directive "
+        "heading changed. Prints '<directive home>: <id>'. Refuses: the id does not exist; any refusal 'directive "
         "add' names."
     ),
 )
 def directive_replace_command(ctx: typer.Context, rule: str = typer.Argument(..., help="Path to the rule.yaml file.")) -> None:
-    """Replace a conventions rule from a rule.yaml file."""
+    """Replace a directive rule from a rule.yaml file."""
     with refusals_reported():
         path, rule_id = directive_replace(ctx.obj, rule)
     typer.echo(f"{path}: {rule_id}")
@@ -713,12 +706,12 @@ def directive_replace_command(ctx: typer.Context, rule: str = typer.Argument(...
 @directive_group.command(
     "drop",
     help=(
-        "Delete the rule this id names from docs/conventions.md. Prints 'docs/conventions.md: <id>'. Refuses: the "
-        "id does not exist; the rule is cited as a conventions rule in a record or in tracked code."
+        "Delete the rule this id names from the directive record. Prints '<directive home>: <id>'. Refuses: the "
+        "id does not exist; the rule is cited as a directive rule in a record or in tracked code."
     ),
 )
 def directive_drop_command(ctx: typer.Context, rule_id: str = typer.Argument(..., help="The rule's id.")) -> None:
-    """Delete a conventions rule by its id."""
+    """Delete a directive rule by its id."""
     with refusals_reported():
         path = directive_drop(ctx.obj, rule_id)
     typer.echo(f"{path}: {rule_id}")
@@ -727,8 +720,8 @@ def directive_drop_command(ctx: typer.Context, rule_id: str = typer.Argument(...
 @results_group.command(
     "add",
     help=(
-        "Add a new row at the end of docs/results.md, from a block-form YAML file naming the twelve schema columns "
-        "(date a YAML date). Prints 'docs/results.md: (<approach>, <world>)'. Refuses: a file that does not read, "
+        "Add a new row at the end of the results record, from a block-form YAML file naming the twelve schema columns "
+        "(date a YAML date). Prints '<results home>: (<approach>, <world>)'. Refuses: a file that does not read, "
         "is not UTF-8, is not valid YAML or is not a mapping; a key that is not text; a column that is not a "
         "results column; a column is missing; a cell that is not text; the (approach, world) key already exists; a "
         "cell that is empty, blank, holds '|' or carries a line break; a date that is not a real YYYY-MM-DD; any "
@@ -745,7 +738,7 @@ def results_add_command(ctx: typer.Context, row: str = typer.Argument(..., help=
 @results_group.command(
     "replace",
     help=(
-        "Replace the row holding a row.yaml file's (approach, world) key. Prints 'docs/results.md: (<approach>, "
+        "Replace the row holding a row.yaml file's (approach, world) key. Prints '<results home>: (<approach>, "
         "<world>)'. Refuses: the key does not exist; any refusal 'results add' names."
     ),
 )
@@ -758,7 +751,7 @@ def results_replace_command(ctx: typer.Context, row: str = typer.Argument(..., h
 
 @results_group.command(
     "drop",
-    help="Delete the row holding this (approach, world) key. Prints 'docs/results.md: (<approach>, <world>)'. Refuses: no such row.",
+    help="Delete the row holding this (approach, world) key. Prints '<results home>: (<approach>, <world>)'. Refuses: no such row.",
 )
 def results_drop_command(
     ctx: typer.Context,
@@ -774,7 +767,7 @@ def results_drop_command(
 @fact_group.command(
     "replace",
     help=(
-        "Replace the one occurrence of old with new in docs/capabilities.md. Prints 'docs/capabilities.md'. "
+        "Replace the one occurrence of old with new in the fact record. Prints '<fact home>'. "
         "Refuses: old occurs zero or several times in the file, naming the count; any candidate FAIL."
     ),
 )
@@ -783,7 +776,7 @@ def fact_replace_command(
     old: str = typer.Argument(..., help="The exact passage to replace."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
 ) -> None:
-    """Replace one exact passage of docs/capabilities.md."""
+    """Replace one exact passage of the fact record."""
     with refusals_reported():
         path = home_of(load_corpus(ctx.obj.store.root), "fact")
         replace_in_place(ctx.obj, path, old, new)
@@ -793,8 +786,8 @@ def fact_replace_command(
 @string_recipes_group.command(
     "replace",
     help=(
-        "Replace the one occurrence of old with new in docs/string_comparison_recipes.md. Prints "
-        "'docs/string_comparison_recipes.md'. Refuses: old occurs zero or several times in the file, naming the "
+        "Replace the one occurrence of old with new in the string_recipes record. Prints "
+        "'<string_recipes home>'. Refuses: old occurs zero or several times in the file, naming the "
         "count; any candidate FAIL."
     ),
 )
@@ -803,7 +796,7 @@ def string_recipes_replace_command(
     old: str = typer.Argument(..., help="The exact passage to replace."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
 ) -> None:
-    """Replace one exact passage of docs/string_comparison_recipes.md."""
+    """Replace one exact passage of the string_recipes record."""
     with refusals_reported():
         path = home_of(load_corpus(ctx.obj.store.root), "string_recipes")
         replace_in_place(ctx.obj, path, old, new)
@@ -813,7 +806,7 @@ def string_recipes_replace_command(
 @spec_group.command(
     "add",
     help=(
-        "Add docs/specs/<name>.md holding a draft file's bytes. Prints the path written. Refuses: the name exists; "
+        "Add <spec home>/<name>.md holding a draft file's bytes. Prints the path written. Refuses: the name exists; "
         "the name is not lowercase words joined by hyphens; any candidate FAIL."
     ),
 )
@@ -831,7 +824,7 @@ def spec_add_command(
 @spec_group.command(
     "replace",
     help=(
-        "Replace the one occurrence of old with new in docs/specs/<name>.md. Prints the path. Refuses: no such "
+        "Replace the one occurrence of old with new in <spec home>/<name>.md. Prints the path. Refuses: no such "
         "spec; old occurs zero or several times, naming the count; any candidate FAIL."
     ),
 )
@@ -843,8 +836,8 @@ def spec_replace_command(
 ) -> None:
     """Replace one exact passage of a spec."""
     with refusals_reported():
-        path = spec_path(name)
         corpus = load_corpus(ctx.obj.store.root)
+        path = spec_path(corpus.schema, name)
         if not corpus.exists(path):
             raise Refusal(f"'{path}' does not exist")
         replace_in_place(ctx.obj, path, old, new)
@@ -854,7 +847,7 @@ def spec_replace_command(
 @spec_group.command(
     "archive",
     help=(
-        "Move docs/specs/<name>.md whole to docs/orchestration_log/archive/spec-<name>-<today>.md. Prints both "
+        "Move <spec home>/<name>.md whole to <archived home>/spec-<name>-<today>.md. Prints both "
         "paths. Refuses: no such spec; the destination already exists."
     ),
 )

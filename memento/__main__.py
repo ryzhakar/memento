@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from memento import Environment, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, schema
+from memento import REFUSED_EXIT_CODE, Environment, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, refusals_reported, schema
 from memento.findings import FAIL, Check, run_checks
 from memento.git import git_exit_status
 from memento.measure.check import check_measurement_log
@@ -59,14 +59,16 @@ app.command("patdown", help=read.PATDOWN_HELP)(read.patdown)
 
 @app.command(
     help=(
-        "Check every record under the root checkout against .claude/memento.yaml. Prints one 'LEVEL  where  message' "
-        "line per finding and a 'records: <n> FAIL, <m> WARN' summary on stdout; exits 1 on any FAIL. Writes nothing."
+        "Check every record under the project's git checkout (the top level of the working directory's repository) "
+        "against .claude/memento.yaml. Prints one 'LEVEL  where  message' line per finding and a 'records: <n> FAIL, "
+        "<m> WARN' summary on stdout; exits 1 on any FAIL. Writes nothing."
     )
 )
 def check(ctx: typer.Context) -> None:
     """Report every record finding and exit 1 on any failing one."""
     environment: Environment = ctx.obj
-    findings = run_checks(load_corpus(environment.store.root), environment.checks)
+    with refusals_reported():
+        findings = run_checks(load_corpus(environment.store.root), environment.checks)
     for finding in findings:
         typer.echo(f"{finding.level}  {finding.where}  {finding.message}")
     failures = sum(finding.level == FAIL for finding in findings)
@@ -74,9 +76,18 @@ def check(ctx: typer.Context) -> None:
     raise typer.Exit(FAILED_CHECK_EXIT_CODE if failures else 0)
 
 
+def project_root() -> Path:
+    """The top level of the git repository the command runs in, refusing a working directory outside any."""
+    shown = git_exit_status(Path.cwd(), "rev-parse", "--show-toplevel")
+    if shown.returncode != 0:
+        typer.echo(f"refused: {Path.cwd()} is not inside a git repository", err=True)
+        raise typer.Exit(REFUSED_EXIT_CODE)
+    return Path(shown.stdout.decode("utf-8").strip()).resolve()
+
+
 def main() -> None:
-    """Run the command against the checkout this package sits in, with the wall clock, atomic replacement, every check and git."""
-    root = Path(__file__).resolve().parent.parent
+    """Run the command against the checkout the working directory sits in, with the wall clock, atomic replacement, every check and git."""
+    root = project_root()
     app(obj=Environment(store=Store(root=root, replace_file=os.replace), now=clock.now, checks=CHECKS, run_git=git_exit_status))
 
 

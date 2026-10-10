@@ -14,7 +14,6 @@ from memento.schema import DATE_PLACEHOLDER, SEGMENT_WILDCARD, Schema
 NO_HEAD_COMMIT = "HEAD names no commit yet; git status has nothing to measure against"
 PORCELAIN_PATH_START = len("XY ")
 JOURNAL_KINDS = ("events", "digest", "failure", "measurement")
-FIRST_RECIPES_FILE = "memento.just"
 GLOB_PATHSPEC = ":(glob)"
 COMMIT_MARK = "\x01"
 DIFF_FILE_HEADER = "diff --git "
@@ -32,9 +31,9 @@ class HistoryStart(NamedTuple):
     minute: str
 
 
-def history_start(root: Path) -> HistoryStart | None:
-    """The oldest commit adding the memento recipes, or None when the history holds none."""
-    added = git_output(root, "log", "--diff-filter=A", "--format=%H %ad", f"--date=format:{MINUTE_FORMAT}", "--", FIRST_RECIPES_FILE)
+def history_start(root: Path, recipes_file: str) -> HistoryStart | None:
+    """The oldest commit adding the memento recipes file, or None when the history holds none."""
+    added = git_output(root, "log", "--diff-filter=A", "--format=%H %ad", f"--date=format:{MINUTE_FORMAT}", "--", recipes_file)
     oldest = added.splitlines()[-1:]
     if not oldest:
         return None

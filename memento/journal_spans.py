@@ -14,16 +14,15 @@ from memento.journal_shapes import (
     entry_text,
     event_fields_of_kind,
 )
+from memento.project import history_glob
 from memento.schema import DATE_PLACEHOLDER, EVENTS_KIND, SEGMENT_WILDCARD, Schema, events_home, kind_for
 
 
-NO_OPEN_SPAN = "no span is open; 'just memento events open <what>'"
+NO_OPEN_SPAN = "no span is open; 'memento events open <what>'"
 SPAN_OPENING = "open"
 SPAN_CLOSING = "close"
 SPAN_MARK_END = ";"
-RATIFIED_ON = "2026-09-23"
 JOURNAL_FILE_PATTERNS = ["session*.md", "events*.md", "failures.md"]
-HISTORY_GLOB = "docs/orchestration_log/history/*"
 SESSION_STEM = "session"
 EVENTS_STEM = "events"
 
@@ -123,7 +122,7 @@ def newest_close_block(corpus: Corpus) -> ClosedSpan | None:
     """The newest close block across every session record, by span date, then minute, then place in its record; None when none holds one."""
     found = [
         ClosedSpan(span_day(path), stamp["minute"], line_number, entry_text(header, body))
-        for path in corpus.glob(f"{HISTORY_GLOB}/{SESSION_STEM}*.md")
+        for path in corpus.glob(f"{history_glob(corpus.schema)}/{SESSION_STEM}*.md")
         for line_number, header, body in split_entries(corpus.text(path))
         if (stamp := CLOSE_HEADER.fullmatch(header))
     ]

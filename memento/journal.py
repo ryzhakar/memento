@@ -52,9 +52,9 @@ failure_group = typer.Typer(no_args_is_help=True, help="Failures: an entry toget
 digest_group = typer.Typer(no_args_is_help=True, help="The span's narrative: add a paragraph, close the span, print the newest close block.")
 
 ROUTED_ELSEWHERE = {
-    SPAN_EVENT: f"{SPAN_EVENT} lines are written by 'just memento events open' or 'just memento digest close'",
-    FAILURE_EVENT: f"a {FAILURE_EVENT} is written by 'just memento failure add', which writes its entry and its events line together",
-    CHANGE_EVENT: f"{CHANGE_EVENT} goes to the change log: 'just memento change add'",
+    SPAN_EVENT: f"{SPAN_EVENT} lines are written by 'memento events open' or 'memento digest close'",
+    FAILURE_EVENT: f"a {FAILURE_EVENT} is written by 'memento failure add', which writes its entry and its events line together",
+    CHANGE_EVENT: f"{CHANGE_EVENT} goes to the change log: 'memento change add'",
 }
 MINUTE_WIDTH = len("YYYY-MM-DDTHH:MM")
 CLOCK_TIME_START = len("YYYY-MM-DDT")
@@ -114,7 +114,7 @@ def record_event(environment: Environment, actor: str, kind: str, what: str) -> 
     "add",
     help=(
         "Append one line '<minute> | <actor> | <kind> | <what>' to the open span's events file "
-        "(docs/orchestration_log/history/<span date>/events.md), stamped by the clock. Reads .claude/memento.yaml "
+        "(the events home, <span date>/events.md), stamped by the clock. Reads .claude/memento.yaml "
         "and the events file; prints '<events file>: <line>'. Refuses: a kind other than decision, discovery, commitment, "
         "delegation, receipt or attenuation; an actor other than owner, self, agent:<name> or tool:<name>; "
         "a what that is not one line; no open span; a clock behind the events file's last line; a worktree; "
@@ -160,7 +160,7 @@ def open_span(environment: Environment, what: str) -> tuple[str, str]:
     "open",
     help=(
         "Open a span: append '<minute> | self | span-event | open; <what>' to today's events file "
-        "(docs/orchestration_log/history/<today>/events.md), created with its directory when absent, stamped by the clock. "
+        "(the events home, <today>/events.md), created with its directory when absent, stamped by the clock. "
         "Reads .claude/memento.yaml and the newest events file; prints '<events file>: <line>'. Refuses: the newest span "
         "still open; a what that is not one line; a clock behind the newest events file's last line; a worktree; "
         "an events file whose working copy edits a line HEAD holds; a schema whose structure memento does not know."
@@ -179,7 +179,7 @@ def open_(
 @events_group.command(
     "tail",
     help=(
-        "Print the newest span's events file (docs/orchestration_log/history/<span date>/events.md), open or closed, "
+        "Print the newest span's events file (the events home, <span date>/events.md), open or closed, "
         "from its last span-event line to its end. Reads .claude/memento.yaml and that file; prints nothing when no "
         "events file exists. Writes nothing and refuses nothing."
     ),
@@ -225,7 +225,7 @@ def add_paragraphs(environment: Environment, texts: list[str]) -> tuple[str, str
     "add",
     help=(
         "Append each argument as one paragraph to the open span's session record "
-        "(docs/orchestration_log/history/<span date>/session.md), created under a '# <span date>' title when absent; "
+        "(the digest home, <span date>/session.md), created under a '# <span date>' title when absent; "
         "narrative after a close block opens under '## After the <HH:MM> close'. Reads .claude/memento.yaml, the open "
         "span's events file and its session record; prints '<session record>: <line>' per line written. Refuses: an "
         "argument holding a line break, empty or starting with a blank; an argument starting '## '; no open span; "
@@ -279,7 +279,7 @@ def close_span(environment: Environment, state: str, open_items: str, next_step:
     "close",
     help=(
         "Close the open span: append a close block '## Close — <minute>' with HEAD, state, open and next to its session "
-        "record (docs/orchestration_log/history/<span date>/session.md, created under a '# <span date>' title when absent) "
+        "record (the digest home, <span date>/session.md, created under a '# <span date>' title when absent) "
         "and '<minute> | self | span-event | close; HEAD <head>; next: <next>' to its events file, in one act. HEAD is "
         "'<short sha> (clean)' or '<short sha> (dirty: <paths>)' from git status. A field's lines are separated by "
         "newlines. Reads .claude/memento.yaml, git, the events file and the session record; prints '<path>: <line>' per "
@@ -305,7 +305,7 @@ def close(
 @digest_group.command(
     "baseline",
     help=(
-        "Print the newest close block across every docs/orchestration_log/history/<date>/session*.md, as the record "
+        "Print the newest close block across every session record under the digest home, as the record "
         "holds it: the one under the latest span date, then with the latest minute, then the later in its record. "
         "Prints nothing when no close block exists. Writes nothing and refuses nothing."
     ),
@@ -348,7 +348,7 @@ def add_failure(environment: Environment, title: str, what_happened: str, mechan
     "add",
     help=(
         "Append a failure entry '## <title>' with its 'What happened:', 'Mechanism:' and 'Correction:' paragraphs to "
-        "the open span's failures file (docs/orchestration_log/history/<span date>/failures.md, created under a "
+        "the open span's failures file (the failure home, <span date>/failures.md, created under a "
         "'# <span date> — failures' title when absent) and '<minute> | self | failure | <title>' to its events file, in "
         "one act. Reads .claude/memento.yaml, the events file and the failures file; prints '<path>: <line>' per line "
         "written. Refuses: a part that is empty, more than one line, or starting with a blank; a title already in the "
