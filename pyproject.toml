@@ -1,0 +1,35 @@
+[project]
+name = "memento"
+version = "0.1.0"
+description = "Typed reads and writes of a project's records, checked against the schema in its .claude/memento.yaml"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic==2.12.5",
+    "pyyaml==6.0.3",
+    "typer==0.24.1",
+]
+
+[project.scripts]
+memento = "memento.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["memento"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pyright]
+pythonVersion = "3.12"
+typeCheckingMode = "standard"
+venvPath = "."
+venv = ".venv"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
