@@ -9,6 +9,7 @@ import typer
 from memento import Environment, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, schema
 from memento.findings import FAIL, Check, run_checks
 from memento.git import git_exit_status
+from memento.measure.check import check_measurement_log
 from memento.schema import load_corpus
 from memento.store import Store
 
@@ -45,6 +46,7 @@ CHECKS: tuple[Check, ...] = (
     pointers.check_budgets,
     pointers.check_history_admission,
     pointers.check_nul_bytes,
+    check_measurement_log,
     partial(schema.check_structure, registered_groups=tuple(KIND_GROUPS)),
 )
 

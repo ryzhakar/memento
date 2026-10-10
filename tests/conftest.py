@@ -169,6 +169,7 @@ def record_texts(schema: dict[str, Any]) -> dict[str, str]:
         "map": map_text(schema),
         "schema": yaml.safe_dump(schema, sort_keys=False, allow_unicode=True),
         "fact": "# Capabilities\n\n## Scoring\n\nThe scorer slices its input.\n",
+        "measurement": "",
     }
     texts: dict[str, str] = {}
     for kind, spec in kinds.items():
