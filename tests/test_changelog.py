@@ -8,7 +8,7 @@ import pytest
 import yaml
 
 from memento.changelog import EntryShapeError, parse_entry_text, parse_raw_entry, split_log
-from tests.conftest import FIXTURES, fixture_schema, git, replace_once, run_memento
+from tests.conftest import FIXTURES, commit_tree, fixture_schema, git, replace_once, run_memento
 
 SAMPLE_LOG = FIXTURES / "change_log.md"
 REQUIRED_ENTRY = {
@@ -306,6 +306,7 @@ def test_add_refuses_an_entry_file_with_a_key_that_is_not_text(record_tree: Path
         ("supersede", "zero or several matching entries"),
         ("age", "already exist"),
         ("repair", "holds no FAIL of the change-log check"),
+        ("repair", "a merged sha that git does not know as an ancestor of the project's main branch"),
     ],
 )
 def test_each_change_verb_help_names_its_refusals(record_tree: Path, verb: str, refusal: str) -> None:
@@ -916,3 +917,64 @@ def test_add_names_the_main_branch_the_project_block_declares(record_tree: Path)
     result = run_memento(record_tree, "change", "add", str(entry_path))
     assert result.exit_code == 1
     assert f"refused: {head_sha(record_tree)} is not on trunk; an entry is written after its change is merged" in result.stderr
+
+
+def commit_off_main(root: Path) -> str:
+    """A real commit on a side branch that is no ancestor of main, the tree left on main."""
+    git(root, "switch", "-q", "-c", "side")
+    (root / "side.txt").write_text("a side commit\n", encoding="utf-8")
+    unmerged = commit_tree(root, "side")
+    git(root, "switch", "-q", "main")
+    return unmerged
+
+
+def test_repair_refuses_a_replacement_whose_merged_sha_is_not_on_main(record_tree: Path) -> None:
+    unmerged = commit_off_main(record_tree)
+    break_frozen_base_entry(record_tree)
+    entry_path = write_entry_yaml(record_tree.parent, start="2026-04-09", title="Repaired frozen base", merged=unmerged)
+    before = log_text(record_tree)
+    result = run_memento(record_tree, "change", "repair", "2026-04-09 — The frozen base changes", str(entry_path))
+    assert (result.exit_code, result.stdout, result.stderr) == (1, "", f"refused: {unmerged} is not on main; an entry is written after its change is merged\n")
+    assert log_text(record_tree) == before
+
+
+def test_repair_lands_the_same_replacement_once_its_merged_sha_is_on_main(record_tree: Path) -> None:
+    commit_off_main(record_tree)
+    break_frozen_base_entry(record_tree)
+    entry_path = write_entry_yaml(record_tree.parent, start="2026-04-09", title="Repaired frozen base", merged=head_sha(record_tree))
+    result = run_memento(record_tree, "change", "repair", "2026-04-09 — The frozen base changes", str(entry_path))
+    assert (result.exit_code, result.stdout) == (0, "docs/architecture_log.md\n")
+
+
+FROZEN_BASE_HEADER = "## 2026-04-09 — The frozen base changes\n"
+
+
+def give_frozen_base_a_blank_line_after_its_header(root: Path) -> None:
+    """Put one blank line between the fixture log's first header and its first field."""
+    replace_once(root, "docs/architecture_log.md", FROZEN_BASE_HEADER + "KIND:", FROZEN_BASE_HEADER + "\nKIND:")
+
+
+def test_add_writes_no_blank_line_after_its_header_and_leaves_an_older_entry_that_has_one(record_tree: Path) -> None:
+    give_frozen_base_a_blank_line_after_its_header(record_tree)
+    entry_path = write_entry_yaml(record_tree.parent, start="2026-09-30", title="A later change", merged=head_sha(record_tree))
+    result = run_memento(record_tree, "change", "add", str(entry_path))
+    assert result.exit_code == 0
+    text = log_text(record_tree)
+    assert "## 2026-09-30 — A later change\nKIND:" in text
+    assert FROZEN_BASE_HEADER + "\nKIND:" in text
+    assert run_memento(record_tree, "check").exit_code == 0
+
+
+def test_check_does_not_flag_an_entry_that_has_a_blank_line_after_its_header(record_tree: Path) -> None:
+    give_frozen_base_a_blank_line_after_its_header(record_tree)
+    assert run_memento(record_tree, "check").stdout.endswith("records: 0 FAIL, 0 WARN\n")
+
+
+def test_repair_writes_no_blank_line_after_the_header_of_the_entry_it_replaces(record_tree: Path) -> None:
+    give_frozen_base_a_blank_line_after_its_header(record_tree)
+    replace_once(record_tree, "docs/architecture_log.md", "\nKIND:          computed", "\nKIND:          sideways")
+    entry_path = write_entry_yaml(record_tree.parent, start="2026-04-09", title="Repaired frozen base", merged=head_sha(record_tree))
+    result = run_memento(record_tree, "change", "repair", "2026-04-09 — The frozen base changes", str(entry_path))
+    assert result.exit_code == 0
+    assert "## 2026-04-09 — Repaired frozen base\nKIND:          computed\n" in log_text(record_tree)
+    assert run_memento(record_tree, "check").exit_code == 0

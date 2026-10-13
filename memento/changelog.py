@@ -324,10 +324,11 @@ def refuse_future_date(label: str, value: date | None, today: date) -> None:
         raise Refusal(f"{label} {value.isoformat()} is after today ({today.isoformat()})")
 
 
-def refuse_unmerged_change(root: Path, sha: str, main_branch: str) -> None:
-    """Refuse a `merged` sha that git does not know as an ancestor of the project's main branch."""
-    if git_exit_status(root, "merge-base", "--is-ancestor", sha, main_branch).returncode != 0:
-        raise Refusal(f"{sha} is not on {main_branch}; an entry is written after its change is merged")
+def refuse_unmerged_entry(root: Path, schema: Schema, data: NewEntryInput) -> None:
+    """Refuse an entry whose `merged` sha git does not know as an ancestor of the project's main branch."""
+    main_branch = project_of(schema).main_branch
+    if git_exit_status(root, "merge-base", "--is-ancestor", data.merged, main_branch).returncode != 0:
+        raise Refusal(f"{data.merged} is not on {main_branch}; an entry is written after its change is merged")
 
 
 def change_spec(environment: Environment) -> tuple[Path, Schema, Mapping[str, Any]]:
@@ -413,7 +414,7 @@ def append_entry(environment: Environment, entry_path: Path) -> str:
     today = environment.now().date()
     refuse_future_date("start", entry.start, today)
     refuse_future_date("end", entry.end, today)
-    refuse_unmerged_change(root, data.merged, project_of(schema).main_branch)
+    refuse_unmerged_entry(root, schema, data)
     seamed = "" if last is None else with_closing_seam(last).render(width=width)
     new_text = prefix + "".join(raws[:-1]) + seamed + entry.render(width=width)
     with environment.store.transaction() as act:
@@ -500,7 +501,7 @@ def fails_within(findings: Iterable[Finding], path: str, first: int, count: int)
 
 def repair_entry(environment: Environment, header_prefix: str, entry_path: Path) -> str:
     """Replace the one entry whose header starts with header_prefix, when it holds a change-log FAIL and its replacement holds none, returning the change log's path."""
-    root, _schema, spec = change_spec(environment)
+    root, schema, spec = change_spec(environment)
     path, width = spec["home"], spec["label_width"]
     corpus = load_corpus(root)
     prefix, raws = split_log(corpus.text(path))
@@ -514,7 +515,9 @@ def repair_entry(environment: Environment, header_prefix: str, entry_path: Path)
     raw = read_entry_yaml(entry_path)
     refuse_quoted_date("start", raw.get("start"))
     refuse_quoted_date("end", raw.get("end"))
-    entry = new_entry(entry_input(raw))
+    data = entry_input(raw)
+    entry = new_entry(data)
+    refuse_unmerged_entry(root, schema, data)
     trailing = CANONICAL_FINAL_TRAILING_BLANK_LINES if index == len(raws) - 1 else CANONICAL_TRAILING_BLANK_LINES
     replacement = entry.model_copy(update={"trailing_blank_lines": trailing}).render(width=width)
     new_text = prefix + replaced(raws, index, replacement)
@@ -648,8 +651,8 @@ def age(ctx: typer.Context) -> None:
         "prints the path written. Refuses: zero or several entries whose header line starts with <header-prefix>; an entry "
         "that holds no FAIL of the change-log check (repair is for an entry that fails the check); a replacement that holds "
         "a FAIL of the check, named; an entry-yaml that does not read, is not UTF-8, is not valid YAML, is not a mapping, "
-        "holds a key or value the entry does not take, or holds a date that is not a calendar date; a candidate FAIL "
-        "elsewhere; a worktree."
+        "holds a key or value the entry does not take, or holds a date that is not a calendar date; a merged sha that git "
+        "does not know as an ancestor of the project's main branch; a candidate FAIL elsewhere; a worktree."
     ),
 )
 def repair(
