@@ -23,7 +23,7 @@ results_group = typer.Typer(no_args_is_help=True, help="Results: add, replace or
 fact_group = typer.Typer(no_args_is_help=True, help="Capabilities: replace one exact passage.")
 string_recipes_group = typer.Typer(no_args_is_help=True, help="String-comparison recipes: replace one exact passage.")
 spec_group = typer.Typer(no_args_is_help=True, help="Specifications: add one, replace one exact passage, archive one.")
-map_group = typer.Typer(no_args_is_help=True, help="The map: render it from the schema.")
+map_group = typer.Typer(no_args_is_help=True, help="The map of the project's records: no verb writes it yet; 'memento check' checks it.")
 
 MAP_COLUMNS = 4
 MAP_HEADER_CELLS = ("path", "---")

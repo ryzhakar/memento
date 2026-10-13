@@ -73,9 +73,3 @@ def test_a_group_registered_before_its_verbs_answers_no_such_command(record_tree
     result = run_memento(record_tree, group, "add")
     assert result.exit_code == USAGE_ERROR_EXIT_CODE
     assert "No such command 'add'" in result.stderr
-
-
-def test_the_measurement_group_help_lists_no_status_verb(record_tree: Path) -> None:
-    result = run_memento(record_tree, "measurement", "--help")
-    assert "run, log, add, void, find, compare, quote" in " ".join(result.stdout.split())
-    assert "status" not in result.stdout

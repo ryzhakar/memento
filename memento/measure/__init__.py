@@ -6,7 +6,7 @@ from memento.measure.add import add_command
 from memento.measure.void import void_command
 
 measurement_group = typer.Typer(
-    no_args_is_help=True, help="The measurement log: run, log, add, void, find, compare, quote."
+    no_args_is_help=True, help="The measurement log: add an entry, void one."
 )
 measurement_group.command(
     "add",
