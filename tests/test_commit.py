@@ -5,9 +5,15 @@ from pathlib import Path
 import pytest
 
 from tests.conftest import HISTORY, git, replace_once, run_memento
+from tests.test_journal import FAILURE_PARTS
 
 OPEN_EVENTS_FILE = f"{HISTORY}/2026-10-01/events.md"
 CAPABILITIES = "docs/capabilities.md"
+MAIN_SPAN = "2026-10-01"
+SIDE_SPAN = "2026-10-01-side"
+SIDE_FILES = [f"{HISTORY}/{MAIN_SPAN}/{kind}-side.md" for kind in ("events", "session", "failures")]
+SIDE_FILES_LISTED = ", ".join(sorted(SIDE_FILES))
+MAIN_FILES_LISTED = ", ".join(f"{HISTORY}/{MAIN_SPAN}/{kind}.md" for kind in ("events", "failures", "session"))
 
 
 @pytest.fixture
@@ -107,3 +113,83 @@ def test_the_commit_type_and_the_subject_word_cap_come_from_the_project_block(co
     assert git(committing_tree, "log", "-1", "--format=%B") == "chore: two words\n\n"
     run_memento(committing_tree, "events", "add", "self", "decision", "again")
     assert_commit_refused(committing_tree, "subject runs 3 words, over 2", "three whole words", OPEN_EVENTS_FILE)
+
+
+@pytest.fixture
+def side_worktree(committing_tree: Path, tmp_path: Path) -> Path:
+    """A linked worktree of the committing tree holding the side span's events, session and failures files, written there and uncommitted."""
+    worktree = tmp_path / "linked"
+    git(committing_tree, "worktree", "add", "-q", "--detach", str(worktree))
+    for step in (("events", "open", "--suffix", "side", "a", "side", "span"), ("digest", "add", "--span", SIDE_SPAN, "narrative"), ("failure", "add", "--span", SIDE_SPAN, *FAILURE_PARTS)):
+        assert run_memento(worktree, *step).exit_code == 0
+    return worktree
+
+
+def test_a_suffixed_span_commits_its_own_files_from_a_linked_worktree_in_that_worktree(committing_tree: Path, side_worktree: Path) -> None:
+    root_before = head_state(committing_tree)
+    result = run_memento(side_worktree, "commit", "--span", SIDE_SPAN, "record the side span", *SIDE_FILES)
+    sha = git(side_worktree, "rev-parse", "--short", "HEAD").strip()
+    assert (result.exit_code, result.stdout) == (0, "\n".join([f"{sha} docs: record the side span", *SIDE_FILES]) + "\n")
+    assert git(side_worktree, "show", "--name-only", "--format=", "HEAD").splitlines() == sorted(SIDE_FILES)
+    assert git(side_worktree, "status", "--porcelain") == ""
+    assert head_state(committing_tree) == root_before
+
+
+def test_a_suffixed_span_commits_only_the_files_it_names_from_a_linked_worktree(committing_tree: Path, side_worktree: Path) -> None:
+    named, left = SIDE_FILES[0], SIDE_FILES[1:]
+    result = run_memento(side_worktree, "commit", "--span", SIDE_SPAN, "record the side events", named)
+    assert result.exit_code == 0
+    assert git(side_worktree, "show", "--name-only", "--format=", "HEAD").splitlines() == [named]
+    assert git(side_worktree, "status", "--porcelain", "--untracked-files=all").splitlines() == [f"?? {path}" for path in sorted(left)]
+
+
+def test_the_unsuffixed_span_still_refuses_in_a_linked_worktree(side_worktree: Path) -> None:
+    message = f"records are written in the root checkout only; this is worktree {side_worktree}"
+    assert_commit_refused(side_worktree, message, "--span", MAIN_SPAN, "subject", OPEN_EVENTS_FILE)
+
+
+@pytest.mark.parametrize("outside", [CAPABILITIES, OPEN_EVENTS_FILE, f"{HISTORY}/2026-10-01/events-other.md"])
+def test_a_path_outside_the_suffixed_spans_files_is_refused_in_a_linked_worktree(side_worktree: Path, outside: str) -> None:
+    replace_once(side_worktree, CAPABILITIES, "slices its input.", "slices its input in pieces.")
+    message = f"{outside} is outside span {SIDE_SPAN}'s own files: {SIDE_FILES_LISTED}"
+    assert_commit_refused(side_worktree, message, "--span", SIDE_SPAN, "subject", SIDE_FILES[0], outside)
+
+
+def test_a_malformed_span_is_refused(side_worktree: Path) -> None:
+    message = "span '2026-10-01-Side' is not YYYY-MM-DD or YYYY-MM-DD-<suffix>, the suffix lowercase letters and digits joined by single hyphens"
+    assert_commit_refused(side_worktree, message, "--span", "2026-10-01-Side", "subject", SIDE_FILES[0])
+
+
+def test_a_failing_check_refuses_a_span_commit_in_a_linked_worktree(side_worktree: Path) -> None:
+    replace_once(side_worktree, "docs/results.md", "2026-10-01", "October")
+    assert_commit_refused(side_worktree, "the records hold 1 FAIL; 'memento check' lists them", "--span", SIDE_SPAN, "subject", SIDE_FILES[0])
+
+
+def test_a_named_span_confines_a_commit_in_the_root_checkout_too(committing_tree: Path) -> None:
+    replace_once(committing_tree, CAPABILITIES, "slices its input.", "slices its input in pieces.")
+    message = f"{CAPABILITIES} is outside span {MAIN_SPAN}'s own files: {MAIN_FILES_LISTED}"
+    assert_commit_refused(committing_tree, message, "--span", MAIN_SPAN, "subject", OPEN_EVENTS_FILE, CAPABILITIES)
+
+
+def test_a_named_span_commits_its_own_files_in_the_root_checkout(committing_tree: Path) -> None:
+    replace_once(committing_tree, CAPABILITIES, "slices its input.", "slices its input in pieces.")
+    result = run_memento(committing_tree, "commit", "--span", MAIN_SPAN, "record the decision", OPEN_EVENTS_FILE)
+    assert result.exit_code == 0
+    assert git(committing_tree, "show", "--name-only", "--format=", "HEAD").splitlines() == [OPEN_EVENTS_FILE]
+    assert git(committing_tree, "status", "--porcelain") == f" M {CAPABILITIES}\n"
+
+
+def test_the_span_variable_neither_confines_a_root_commit_nor_frees_a_worktree_commit(committing_tree: Path, side_worktree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MEMENTO_SPAN", SIDE_SPAN)
+    message = f"records are written in the root checkout only; this is worktree {side_worktree}"
+    assert_commit_refused(side_worktree, message, "subject", SIDE_FILES[0])
+    replace_once(committing_tree, CAPABILITIES, "slices its input.", "slices its input in pieces.")
+    assert run_memento(committing_tree, "commit", "record the capabilities", CAPABILITIES).exit_code == 0
+
+
+def test_the_commit_help_names_the_span_option_and_the_worktree_it_opens(record_tree: Path) -> None:
+    result = run_memento(record_tree, "commit", "--help")
+    text = " ".join(result.stdout.replace("│", " ").split())
+    assert result.exit_code == 0
+    for phrase in ("--span", "in a linked worktree", "a worktree without --span naming a suffixed span", "that is not that span's events, session or failures file", "does not read MEMENTO_SPAN"):
+        assert phrase in text

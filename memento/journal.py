@@ -43,11 +43,11 @@ from memento.journal_spans import (
     Span,
     events_tail,
     lineage_head,
+    named_span,
     newest_close_block,
     open_since,
     open_span_events,
     open_spans,
-    parse_span,
     read_span_events,
     several_open,
     span_events,
@@ -88,11 +88,6 @@ BASELINE_SPAN_HELP = (
 def span_option(help_text: str = SPAN_HELP) -> str | None:
     """The `--span` option every journal verb takes, defaulting to the span the MEMENTO_SPAN variable names."""
     return typer.Option(None, "--span", envvar=SPAN_VARIABLE, help=help_text)
-
-
-def named_span(text: str | None) -> Span | None:
-    """The span a `--span` argument names, or None when it was omitted."""
-    return None if text is None else parse_span(text)
 
 
 def span_transaction(store: Store, schema: Schema, span: Span) -> AbstractContextManager[Act]:

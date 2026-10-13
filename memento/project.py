@@ -4,7 +4,7 @@ import re
 from pathlib import PurePosixPath
 from typing import Annotated
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, ValidationError
 
 from memento import Refusal
 from memento.findings import DATE
@@ -13,6 +13,27 @@ from memento.schema import DIRECTORY_MARK, SCHEMA_HOME, Schema
 PROJECT_KEY = "project"
 ARCHIVE_FILE_NAME = "{stem}-{first}--{last}.md"
 SPEC_ARCHIVE_FILE_NAME = "spec-{name}-{day}.md"
+FULL_SHA = r"[0-9a-f]{40}"
+ASCII_MINUTE_TEXT = r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}"
+RULING_SEPARATOR = " "
+
+
+class JournalCorrection(BaseModel):
+    """A commit the owner ruled may change written journal lines, and the events path and minute of the owner decision line recording that ruling."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid", strict=True)
+    commit: Annotated[str, StringConstraints(pattern=rf"^{FULL_SHA}$")]
+    ruling: Annotated[str, StringConstraints(pattern=rf"^\S+{RULING_SEPARATOR}{ASCII_MINUTE_TEXT}$")]
+
+    @property
+    def ruling_path(self) -> str:
+        """The events file the ruling's decision line is in."""
+        return self.ruling.rpartition(RULING_SEPARATOR)[0]
+
+    @property
+    def ruling_minute(self) -> str:
+        """The minute the ruling's decision line is stamped with."""
+        return self.ruling.rpartition(RULING_SEPARATOR)[2]
 
 
 class Project(BaseModel):
@@ -27,6 +48,7 @@ class Project(BaseModel):
     measured_cli: str
     commit_type: str
     commit_subject_words: int
+    journal_corrections: list[JournalCorrection] = Field(default_factory=list)
 
 
 def project_of(schema: Schema) -> Project:

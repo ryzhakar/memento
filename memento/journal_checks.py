@@ -4,12 +4,16 @@ from collections.abc import Iterator
 from pathlib import PurePosixPath
 
 from memento import Refusal
+from memento.actor import Owner
 from memento.clock import minute
 from memento.findings import Corpus, Finding, fail, split_entries
+from memento.git import is_ancestor
 from memento.journal_git import HistoryStart, history_start, lines_removed_since
 from memento.journal_shapes import (
+    ACTOR_FIELD,
     CLOSE_HEADING,
     FAILURE_EVENT,
+    MINUTE_FIELD,
     QUOTED_LINE_WIDTH,
     close_label_width_shortfall,
     close_labels_disagreement,
@@ -29,11 +33,13 @@ from memento.journal_spans import (
     span_of,
     span_path,
 )
-from memento.project import history_glob, project_of
-from memento.schema import DIGEST_KIND, EVENTS_KIND, FAILURE_KIND, SCHEMA_HOME
+from memento.project import JournalCorrection, history_glob, project_of
+from memento.schema import DIGEST_KIND, EVENTS_KIND, FAILURE_KIND, SCHEMA_HOME, kind_for
 
 
 SHORT_SHA_WIDTH = 8
+DECISION_EVENT = "decision"
+OWNER_ACTOR = Owner().render()
 SPAN_FILE_PATTERNS = ((EVENTS_KIND, "events*.md"), (DIGEST_KIND, "session*.md"), (FAILURE_KIND, "failures*.md"))
 
 
@@ -142,9 +148,11 @@ def check_journal_history(corpus: Corpus) -> Iterator[Finding]:
 
 
 def removed_line_findings(corpus: Corpus, start: HistoryStart) -> Iterator[Finding]:
-    """Fail every line a commit since the start removed from an events, session, failures or measurement file."""
+    """Fail every line a commit since the start removed from an events, session, failures or measurement file, except in a commit the project lists as an owner-ruled journal correction."""
+    corrected = {correction.commit for correction in project_of(corpus.schema).journal_corrections}
     for removed in lines_removed_since(corpus.root, corpus.schema, start):
-        yield fail(removed.path, f"commit {removed.sha[:SHORT_SHA_WIDTH]} removes a written line: {removed.line[:QUOTED_LINE_WIDTH]!r}")
+        if removed.sha not in corrected:
+            yield fail(removed.path, f"commit {removed.sha[:SHORT_SHA_WIDTH]} removes a written line: {removed.line[:QUOTED_LINE_WIDTH]!r}")
 
 
 def alternation_findings(corpus: Corpus, start: HistoryStart) -> Iterator[Finding]:
@@ -157,3 +165,31 @@ def alternation_findings(corpus: Corpus, start: HistoryStart) -> Iterator[Findin
             if mark.mark != due and mark.minute >= start.minute:
                 yield fail(f"{events_file}:{mark.line_number}", f"span-event '{mark.mark}{SPAN_MARK_END}' where '{due}{SPAN_MARK_END}' is due; spans open and close in turn")
             lineages[lineage] = mark.mark
+
+
+def holds_owner_decision_at(events_text: str, stamp: str) -> bool:
+    """Whether an events file holds an owner decision line stamped at the minute."""
+    lines = (event_fields_of_kind(line, DECISION_EVENT) for line in events_text.splitlines())
+    return any(fields is not None and fields[MINUTE_FIELD] == stamp and fields[ACTOR_FIELD] == OWNER_ACTOR for fields in lines)
+
+
+def ruling_problem(corpus: Corpus, correction: JournalCorrection) -> str | None:
+    """Why a correction's ruling resolves to no owner decision line, or None when it resolves."""
+    path, stamp = correction.ruling_path, correction.ruling_minute
+    if kind_for(corpus.schema, path) != EVENTS_KIND:
+        return f"ruling {path} is not an events file"
+    if not corpus.exists(path):
+        return f"ruling {path} does not exist"
+    if not holds_owner_decision_at(corpus.text(path), stamp):
+        return f"ruling {path} holds no 'owner | decision' line at {stamp}"
+    return None
+
+
+def check_journal_corrections(corpus: Corpus) -> Iterator[Finding]:
+    """Fail a listed journal correction whose commit is not in HEAD's history, and one whose ruling resolves to no owner decision line at its minute."""
+    for correction in project_of(corpus.schema).journal_corrections:
+        if not is_ancestor(corpus.root, correction.commit, "HEAD"):
+            yield fail(SCHEMA_HOME, f"journal correction commit {correction.commit} is not in HEAD's history")
+        problem = ruling_problem(corpus, correction)
+        if problem is not None:
+            yield fail(SCHEMA_HOME, f"journal correction {correction.commit}: {problem}")

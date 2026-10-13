@@ -27,6 +27,11 @@ def object_exists(root: Path, revision: str) -> bool:
     return git_exit_status(root, "cat-file", "-e", revision).returncode == 0
 
 
+def is_ancestor(root: Path, revision: str, descendant: str) -> bool:
+    """Whether a revision is the descendant itself or one of its ancestors; a revision git holds no commit for is not."""
+    return git_exit_status(root, "merge-base", "--is-ancestor", revision, descendant).returncode == 0
+
+
 def git_directory(root: Path, flag: str) -> Path:
     """The directory `git rev-parse <flag>` names, made absolute against root."""
     return (root / git_output(root, "rev-parse", flag).strip()).resolve()

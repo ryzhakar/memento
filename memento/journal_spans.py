@@ -73,6 +73,11 @@ def parse_span(text: str) -> Span:
     return construct(Span, day=named["day"], suffix=named["suffix"])
 
 
+def named_span(text: str | None) -> Span | None:
+    """The span a `--span` argument names, or None when it was omitted."""
+    return None if text is None else parse_span(text)
+
+
 def span_pattern(home: str) -> re.Pattern[str]:
     """The paths a span kind's home covers, its day and its optional suffix captured."""
     head, wildcard, tail = home.partition(SEGMENT_WILDCARD)
