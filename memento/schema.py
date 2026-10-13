@@ -10,7 +10,7 @@ import yaml
 from memento import Refusal
 from memento.actor import ACTOR_FORMS
 from memento.findings import Corpus, Finding, fail
-from memento.git import tracked_files
+from memento.git import is_worktree, main_checkout, tracked_files
 
 SCHEMA_HOME = ".claude/memento.yaml"
 DATE_PLACEHOLDER = "{date}"
@@ -24,6 +24,7 @@ OWNER_STATED = "owner-stated"
 EXACT_HOME_RANK = 0
 WILDCARD_HOME_RANK = 1
 DIRECTORY_HOME_RANK = 2
+SPAN_HOME = re.compile(r"[^*{}]+/\{date\}/[^*{}/]+\*\.md")
 
 KNOWN_KINDS = (
     "charter",
@@ -51,6 +52,9 @@ KNOWN_KINDS = (
 
 EventKind = Literal["decision", "discovery", "commitment", "delegation", "receipt", "attenuation"]
 EVENTS_KIND = "events"
+DIGEST_KIND = "digest"
+FAILURE_KIND = "failure"
+SPAN_KINDS = (EVENTS_KIND, DIGEST_KIND, FAILURE_KIND)
 EVENT_KINDS: tuple[str, ...] = get_args(EventKind)
 KNOWN_EVENT_ROUTES = {kind: EVENTS_KIND for kind in EVENT_KINDS} | {
     "span-event": EVENTS_KIND,
@@ -67,8 +71,8 @@ def load_schema(root: Path) -> Schema:
 
 
 def load_corpus(root: Path) -> Corpus:
-    """The corpus every check reads: root's schema, its tracked paths, and its working tree."""
-    return Corpus(root=root, schema=load_schema(root), tracked=tracked_files(root))
+    """The corpus every check reads: root's schema, its tracked paths, and its working tree, with the main checkout beside it when root is a linked worktree."""
+    return Corpus(root=root, schema=load_schema(root), tracked=tracked_files(root), main_root=main_checkout(root) if is_worktree(root) else None)
 
 
 def structure_disagreements(schema: Schema) -> list[str]:
@@ -82,7 +86,17 @@ def structure_disagreements(schema: Schema) -> list[str]:
         disagreements.append(f"schema declares events {schema['events']}; memento knows {KNOWN_EVENT_ROUTES}")
     if declared_actors != list(ACTOR_FORMS):
         disagreements.append(f"schema declares events actors {declared_actors}; memento knows {list(ACTOR_FORMS)}")
-    return disagreements
+    return disagreements + span_home_disagreements(schema)
+
+
+def span_home_disagreements(schema: Schema) -> list[str]:
+    """Each span kind whose home leaves no slot for a span's suffix: a home ending `{date}/<name>*.md`."""
+    homes = {kind: schema["kinds"].get(kind, {}).get("home", "") for kind in SPAN_KINDS}
+    return [
+        f"schema declares {kind} home {home}; memento knows homes ending '{DATE_PLACEHOLDER}/<name>{SEGMENT_WILDCARD}.md', the '{SEGMENT_WILDCARD}' standing for a span's suffix"
+        for kind, home in homes.items()
+        if kind in schema["kinds"] and not SPAN_HOME.fullmatch(home)
+    ]
 
 
 def agreeing_schema(root: Path) -> Schema:

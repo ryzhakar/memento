@@ -11,9 +11,9 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 
 from memento import Refusal
-from memento.git import file_at_head, is_worktree
+from memento.git import file_at_head, git_directory, is_worktree
 
-LOCK_PATH = ".git/memento.lock"
+LOCK_NAME = "memento.lock"
 TEMPORARY_SUFFIX = ".memento"
 NEW_RECORD_MODE = 0o644
 
@@ -40,9 +40,10 @@ class Staged:
 
 @dataclass
 class Act:
-    """The writes one verb stages, landed together when its transaction ends."""
+    """The writes one verb stages, landed together when its transaction ends; confined_to, when set, names the only files it may stage."""
 
     root: Path
+    confined_to: frozenset[str] | None = None
     staged: dict[str, Staged] = field(default_factory=dict)
 
     def append(self, path: str, text: str) -> None:
@@ -63,7 +64,9 @@ class Act:
         self.stage(path, None)
 
     def stage(self, path: str, after: bytes | None) -> None:
-        """Record what a file holds once the act lands, beside its bytes before the act."""
+        """Record what a file holds once the act lands, beside its bytes before the act, refusing a file outside the act's confinement."""
+        if self.confined_to is not None and path not in self.confined_to:
+            raise Refusal(f"{path} is outside the files this act may write: {', '.join(sorted(self.confined_to))}")
         self.staged[path] = Staged(before=snapshot_if_present(self.root / path), after=after)
 
 
@@ -83,6 +86,14 @@ class Store:
             yield act
             land(self.root, act.staged, self.replace_file)
 
+    @contextmanager
+    def confined_transaction(self, files: frozenset[str]) -> Iterator[Act]:
+        """Hold the record lock in the root checkout or a linked worktree, and land everything staged, or nothing, the act refusing any file but these."""
+        with record_lock(self.root):
+            act = Act(self.root, confined_to=files)
+            yield act
+            land(self.root, act.staged, self.replace_file)
+
 
 def refuse_worktree(root: Path) -> None:
     """Refuse a write anywhere but the repository's own checkout."""
@@ -92,8 +103,8 @@ def refuse_worktree(root: Path) -> None:
 
 @contextmanager
 def record_lock(root: Path) -> Iterator[None]:
-    """Hold the exclusive record lock under root's git directory, waiting for any other holder."""
-    with (root / LOCK_PATH).open("a") as handle:
+    """Hold the exclusive record lock under root's own git directory, the worktree's when root is a linked worktree, waiting for any other holder."""
+    with (git_directory(root, "--git-dir") / LOCK_NAME).open("a") as handle:
         fcntl.flock(handle, fcntl.LOCK_EX)
         try:
             yield

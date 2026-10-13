@@ -251,3 +251,30 @@ def test_a_rollback_that_cannot_restore_one_file_restores_the_others_and_names_i
             act.append("second.md", "first line\n")
             act.append("third.md", "first line\n")
     assert (sorted(path.name for path in repository.iterdir()), leftover_temporaries(repository)) == ([".git", "kept.md"], [])
+
+
+def test_a_confined_act_refuses_a_file_it_was_not_given_and_lands_nothing(repository: Path) -> None:
+    store = Store(root=repository, replace_file=os.replace)
+    with pytest.raises(Refusal, match=r"other\.md is outside the files this act may write: given\.md"):
+        with store.confined_transaction(frozenset({"given.md"})) as act:
+            act.append("given.md", "inside\n")
+            act.append("other.md", "outside\n")
+    assert not (repository / "given.md").exists()
+    assert not (repository / "other.md").exists()
+
+
+def test_a_confined_act_lands_its_own_files_in_a_linked_worktree(repository: Path, tmp_path: Path) -> None:
+    worktree = tmp_path / "linked"
+    git(repository, "worktree", "add", "-q", "--detach", str(worktree))
+    with Store(root=worktree, replace_file=os.replace).confined_transaction(frozenset({"given.md"})) as act:
+        act.append("given.md", "from the worktree\n")
+    assert (worktree / "given.md").read_text(encoding="utf-8") == "from the worktree\n"
+    assert not (repository / "given.md").exists()
+
+
+def test_an_unconfined_act_refuses_in_a_linked_worktree(repository: Path, tmp_path: Path) -> None:
+    worktree = tmp_path / "linked"
+    git(repository, "worktree", "add", "-q", "--detach", str(worktree))
+    with pytest.raises(Refusal, match="records are written in the root checkout only"):
+        with Store(root=worktree, replace_file=os.replace).transaction():
+            pass

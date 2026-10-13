@@ -1,5 +1,6 @@
 """The journal's verbs: open and add to a span's events, add to and close its narrative, record its failures."""
 
+from contextlib import AbstractContextManager
 from pathlib import Path
 
 import typer
@@ -18,6 +19,7 @@ from memento.journal_shapes import (
     HEAD_LABEL,
     LABEL_MARK,
     LONGEST_CLOSE_LABEL,
+    MINUTE_WIDTH,
     NEWLINE,
     NEXT_LABEL,
     SPAN_EVENT,
@@ -34,17 +36,20 @@ from memento.journal_spans import (
     SPAN_CLOSING,
     SPAN_MARK_END,
     SPAN_OPENING,
-    events_file_for,
+    Span,
     events_tail,
-    failures_file_for,
+    lineage_head,
     newest_close_block,
-    newest_events_file,
     open_since,
     open_span_events,
-    session_file_for,
-    span_day,
+    parse_span,
+    read_span_events,
+    span_events,
+    span_files,
+    span_path,
 )
-from memento.schema import EVENT_KINDS, EventKind, agreeing_schema, load_corpus, load_schema
+from memento.schema import DIGEST_KIND, EVENT_KINDS, EVENTS_KIND, FAILURE_KIND, EventKind, Schema, agreeing_schema, load_corpus
+from memento.store import Act, Store
 
 
 events_group = typer.Typer(no_args_is_help=True, help="Events: open a span, add a line to its events file, tail it.")
@@ -56,12 +61,27 @@ ROUTED_ELSEWHERE = {
     FAILURE_EVENT: f"a {FAILURE_EVENT} is written by 'memento failure add', which writes its entry and its events line together",
     CHANGE_EVENT: f"{CHANGE_EVENT} goes to the change log: 'memento change add'",
 }
-MINUTE_WIDTH = len("YYYY-MM-DDTHH:MM")
 CLOCK_TIME_START = len("YYYY-MM-DDT")
 SESSION_TITLE = "# {day}\n"
 FAILURES_TITLE = "# {day} — failures\n"
 AFTER_CLOSE_HEADING = "## After the {time} close\n"
 EVENT_KIND_ADAPTER = TypeAdapter(EventKind)
+SPAN_HELP = "The span to act on: '<date>' or '<date>-<suffix>'. Omitted, the only open span; required while several are open."
+
+
+def span_option() -> str | None:
+    """The `--span` option every journal verb takes."""
+    return typer.Option(None, "--span", help=SPAN_HELP)
+
+
+def named_span(text: str | None) -> Span | None:
+    """The span a `--span` argument names, or None when it was omitted."""
+    return None if text is None else parse_span(text)
+
+
+def span_transaction(store: Store, schema: Schema, span: Span) -> AbstractContextManager[Act]:
+    """The transaction a span's verb writes in: the main span's in the root checkout alone, a suffixed span's confined to its own files in the root checkout or a linked worktree."""
+    return store.transaction() if span.suffix is None else store.confined_transaction(span_files(schema, span))
 
 
 def refuse_disagreement(disagreement: str | None) -> None:
@@ -97,27 +117,30 @@ def written_lines(path: str, text: str) -> list[str]:
     return [f"{path}: {line}" for line in text.splitlines() if line.strip()]
 
 
-def record_event(environment: Environment, actor: str, kind: str, what: str) -> tuple[str, str]:
+def record_event(environment: Environment, actor: str, kind: str, what: str, wanted: Span | None) -> tuple[str, str]:
     """Append one event line to the open span's events file, returning the file's path and the line."""
     root = environment.store.root
     schema = agreeing_schema(root)
     author, event = parse_actor(actor), event_kind(kind)
-    with environment.store.transaction() as act:
+    span = open_span_events(root, schema, wanted).span
+    with span_transaction(environment.store, schema, span) as act:
         line = construct(EventLine, at=environment.now(), actor=author, kind=event, what=what)
-        span = open_span_events(root, schema)
-        refuse_clock_behind(minute(line.at), span.text)
-        act.append(span.events_file, line.render() + NEWLINE)
-    return span.events_file, line.render()
+        found = open_span_events(root, schema, span)
+        refuse_clock_behind(minute(line.at), found.text)
+        act.append(found.events_file, line.render() + NEWLINE)
+    return found.events_file, line.render()
 
 
 @events_group.command(
     "add",
     help=(
-        "Append one line '<minute> | <actor> | <kind> | <what>' to the open span's events file "
-        "(the events home, <span date>/events.md), stamped by the clock. Reads .claude/memento.yaml "
-        "and the events file; prints '<events file>: <line>'. Refuses: a kind other than decision, discovery, commitment, "
+        "Append one line '<minute> | <actor> | <kind> | <what>' to a span's events file "
+        "(the events home, <span date>/events.md or <span date>/events-<suffix>.md), stamped by the clock. Reads .claude/memento.yaml "
+        "and the events files; prints '<events file>: <line>'. Refuses: a kind other than decision, discovery, commitment, "
         "delegation, receipt or attenuation; an actor other than owner, self, agent:<name> or tool:<name>; "
-        "a what that is not one line; no open span; a clock behind the events file's last line; a worktree; "
+        "a what that is not one line; a --span off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; "
+        "no open span; several open spans and no --span; a clock behind the events file's last line; "
+        "the main span in a linked worktree (a suffixed span writes there); "
         "an events file whose working copy edits a line HEAD holds; a schema whose structure memento does not know."
     ),
 )
@@ -126,32 +149,33 @@ def add(
     actor: str = typer.Argument(..., help="owner, self, agent:<name> or tool:<name>."),
     kind: str = typer.Argument(..., help="decision, discovery, commitment, delegation, receipt or attenuation."),
     what: list[str] = typer.Argument(..., help="What happened; several words are joined by single spaces."),
+    span: str | None = span_option(),
 ) -> None:
-    """Append one event line to the open span's events file."""
+    """Append one event line to a span's events file."""
     with refusals_reported():
-        events_file, line = record_event(ctx.obj, actor, kind, " ".join(what))
+        events_file, line = record_event(ctx.obj, actor, kind, " ".join(what), named_span(span))
     typer.echo(f"{events_file}: {line}")
 
 
-def refuse_open_span(events_file: str, events_text: str) -> None:
-    """Refuse opening a span while the newest one is open."""
+def refuse_open_span(span: Span, events_text: str) -> None:
+    """Refuse opening a span while its lineage's newest one is open."""
     since = open_since(events_text)
     if since is not None:
-        raise Refusal(f"span {span_day(events_file)} is open since {since}; resume it or close it")
+        raise Refusal(f"span {span.name} is open since {since}; resume it or close it")
 
 
-def open_span(environment: Environment, what: str) -> tuple[str, str]:
-    """Append a span-opening line to today's events file, returning the file's path and the line."""
+def open_span(environment: Environment, what: str, suffix: str | None) -> tuple[str, str]:
+    """Append a span-opening line to today's events file of the main span, or of the suffixed one beside it, returning the file's path and the line."""
     root = environment.store.root
     schema = agreeing_schema(root)
-    with environment.store.transaction() as act:
+    today = construct(Span, day=environment.now().date().isoformat(), suffix=suffix)
+    with span_transaction(environment.store, schema, today) as act:
         line = construct(EventLine, at=environment.now(), actor=Self_(), kind=SPAN_EVENT, what=f"{SPAN_OPENING}{SPAN_MARK_END} {what}")
-        newest = newest_events_file(root, schema)
+        newest = lineage_head(root, schema, suffix)
         if newest is not None:
-            newest_text = (root / newest).read_text(encoding="utf-8")
-            refuse_open_span(newest, newest_text)
-            refuse_clock_behind(minute(line.at), newest_text)
-        events_file = events_file_for(schema, line.at.date().isoformat())
+            refuse_open_span(newest.span, newest.text)
+            refuse_clock_behind(minute(line.at), newest.text)
+        events_file = span_path(schema, EVENTS_KIND, construct(Span, day=line.at.date().isoformat(), suffix=suffix))
         act.append(events_file, line.render() + NEWLINE)
     return events_file, line.render()
 
@@ -160,36 +184,42 @@ def open_span(environment: Environment, what: str) -> tuple[str, str]:
     "open",
     help=(
         "Open a span: append '<minute> | self | span-event | open; <what>' to today's events file "
-        "(the events home, <today>/events.md), created with its directory when absent, stamped by the clock. "
-        "Reads .claude/memento.yaml and the newest events file; prints '<events file>: <line>'. Refuses: the newest span "
-        "still open; a what that is not one line; a clock behind the newest events file's last line; a worktree; "
+        "(the events home, <today>/events.md; with --suffix <s>, <today>/events-<s>.md, a parallel span beside the main one), "
+        "created with its directory when absent, stamped by the clock. "
+        "Reads .claude/memento.yaml and the newest events file of that suffix; prints '<events file>: <line>'. Refuses: the newest span "
+        "of that suffix still open; a suffix that is not lowercase letters and digits joined by single hyphens; a what that is not one line; "
+        "a clock behind that events file's last line; the main span in a linked worktree (a suffixed span opens there); "
         "an events file whose working copy edits a line HEAD holds; a schema whose structure memento does not know."
     ),
 )
 def open_(
     ctx: typer.Context,
     what: list[str] = typer.Argument(..., help="What the span opens on; several words are joined by single spaces."),
+    suffix: str | None = typer.Option(None, "--suffix", help="Open a parallel span named by this suffix, beside the main one."),
 ) -> None:
     """Open a span in today's events file."""
     with refusals_reported():
-        events_file, line = open_span(ctx.obj, " ".join(what))
+        events_file, line = open_span(ctx.obj, " ".join(what), suffix)
     typer.echo(f"{events_file}: {line}")
 
 
 @events_group.command(
     "tail",
     help=(
-        "Print the newest span's events file (the events home, <span date>/events.md), open or closed, "
-        "from its last span-event line to its end. Reads .claude/memento.yaml and that file; prints nothing when no "
-        "events file exists. Writes nothing and refuses nothing."
+        "Print a span's events file (the events home, <span date>/events.md or <span date>/events-<suffix>.md), open or closed, "
+        "from its last span-event line to its end: the --span named, else the only open span, else the most recently written. "
+        "Reads .claude/memento.yaml and the events files; prints nothing when no events file exists. Writes nothing. "
+        "Refuses: a --span off the '<date>[-<suffix>]' shape or naming no events file; several open spans and no --span; "
+        "a schema whose structure memento does not know."
     ),
 )
-def tail(ctx: typer.Context) -> None:
-    """Print the newest span's events from its last span-event line."""
+def tail(ctx: typer.Context, span: str | None = span_option()) -> None:
+    """Print a span's events from its last span-event line."""
     environment: Environment = ctx.obj
     root = environment.store.root
-    events_file = newest_events_file(root, load_schema(root))
-    typer.echo(events_tail((root / events_file).read_text(encoding="utf-8")) if events_file else "", nl=False)
+    with refusals_reported():
+        found = read_span_events(root, agreeing_schema(root), named_span(span))
+    typer.echo(events_tail(found.text) if found else "", nl=False)
 
 
 def last_close_minute(session_text: str) -> str | None:
@@ -207,15 +237,16 @@ def session_lead(session_text: str | None, day: str) -> str:
     return NEWLINE + AFTER_CLOSE_HEADING.format(time=closed_at[CLOCK_TIME_START:]) if closed_at else ""
 
 
-def add_paragraphs(environment: Environment, texts: list[str]) -> tuple[str, str]:
+def add_paragraphs(environment: Environment, texts: list[str], wanted: Span | None) -> tuple[str, str]:
     """Append each text as one paragraph to the open span's session record, returning the record's path and the text added."""
     root = environment.store.root
     schema = agreeing_schema(root)
     paragraphs = [construct(Paragraph, text=text) for text in texts]
-    with environment.store.transaction() as act:
-        events_file = open_span_events(root, schema).events_file
-        session = session_file_for(events_file)
-        added = session_lead(text_if_present(root, session), span_day(events_file))
+    span = open_span_events(root, schema, wanted).span
+    with span_transaction(environment.store, schema, span) as act:
+        open_span_events(root, schema, span)
+        session = span_path(schema, DIGEST_KIND, span)
+        added = session_lead(text_if_present(root, session), span.day)
         added += "".join(NEWLINE + paragraph.render() for paragraph in paragraphs)
         act.append(session, added)
     return session, added
@@ -224,21 +255,23 @@ def add_paragraphs(environment: Environment, texts: list[str]) -> tuple[str, str
 @digest_group.command(
     "add",
     help=(
-        "Append each argument as one paragraph to the open span's session record "
-        "(the digest home, <span date>/session.md), created under a '# <span date>' title when absent; "
-        "narrative after a close block opens under '## After the <HH:MM> close'. Reads .claude/memento.yaml, the open "
+        "Append each argument as one paragraph to a span's session record "
+        "(the digest home, <span date>/session.md or <span date>/session-<suffix>.md), created under a '# <span date>' title when absent; "
+        "narrative after a close block opens under '## After the <HH:MM> close'. Reads .claude/memento.yaml, the "
         "span's events file and its session record; prints '<session record>: <line>' per line written. Refuses: an "
-        "argument holding a line break, empty or starting with a blank; an argument starting '## '; no open span; "
-        "a worktree; a session record whose working copy edits a line HEAD holds."
+        "argument holding a line break, empty or starting with a blank; an argument starting '## '; a --span off the "
+        "'<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; several open spans and no --span; "
+        "the main span in a linked worktree (a suffixed span writes there); a session record whose working copy edits a line HEAD holds."
     ),
 )
 def add_paragraph(
     ctx: typer.Context,
     paragraphs: list[str] = typer.Argument(..., help="One paragraph per argument, each one line."),
+    span: str | None = span_option(),
 ) -> None:
-    """Append paragraphs to the open span's session record."""
+    """Append paragraphs to a span's session record."""
     with refusals_reported():
-        session, added = add_paragraphs(ctx.obj, paragraphs)
+        session, added = add_paragraphs(ctx.obj, paragraphs, named_span(span))
     typer.echo(NEWLINE.join(written_lines(session, added)))
 
 
@@ -248,7 +281,7 @@ def refuse_multiline_next(next_step: str) -> None:
         raise Refusal("next is one line; the span's close line in the events file carries it")
 
 
-def close_span(environment: Environment, state: str, open_items: str, next_step: str) -> list[tuple[str, str]]:
+def close_span(environment: Environment, state: str, open_items: str, next_step: str, wanted: Span | None) -> list[tuple[str, str]]:
     """Append a close block to the open span's session record and its close line to its events file, in one act."""
     root = environment.store.root
     schema = agreeing_schema(root)
@@ -256,8 +289,9 @@ def close_span(environment: Environment, state: str, open_items: str, next_step:
     refuse_disagreement(close_labels_disagreement(schema))
     refuse_disagreement(close_label_width_shortfall(schema))
     refuse_multiline_next(next_step)
-    with environment.store.transaction() as act:
-        events_file, events_text = open_span_events(root, schema)
+    span = open_span_events(root, schema, wanted).span
+    with span_transaction(environment.store, schema, span) as act:
+        _span, events_file, events_text = open_span_events(root, schema, span)
         at = environment.now()
         head = found_head(environment.run_git, root)
         block = construct(CloseBlock, at=at, head=head, state=state, open_items=open_items, next_step=next_step)
@@ -267,9 +301,9 @@ def close_span(environment: Environment, state: str, open_items: str, next_step:
         what = f"{SPAN_CLOSING}{SPAN_MARK_END} {HEAD_LABEL} {head.render()}{SPAN_MARK_END} {NEXT_LABEL}{LABEL_MARK} {next_step}"
         line = construct(EventLine, at=at, actor=Self_(), kind=SPAN_EVENT, what=what)
         refuse_clock_behind(minute(at), events_text)
-        session = session_file_for(events_file)
+        session = span_path(schema, DIGEST_KIND, span)
         session_text = text_if_present(root, session)
-        block_text = (SESSION_TITLE.format(day=span_day(events_file)) if session_text is None else "") + NEWLINE + block.render(spec["close_label_width"])
+        block_text = (SESSION_TITLE.format(day=span.day) if session_text is None else "") + NEWLINE + block.render(spec["close_label_width"])
         act.append(session, block_text)
         act.append(events_file, line.render() + NEWLINE)
     return [(session, block_text), (events_file, line.render())]
@@ -278,14 +312,15 @@ def close_span(environment: Environment, state: str, open_items: str, next_step:
 @digest_group.command(
     "close",
     help=(
-        "Close the open span: append a close block '## Close — <minute>' with HEAD, state, open and next to its session "
-        "record (the digest home, <span date>/session.md, created under a '# <span date>' title when absent) "
+        "Close a span: append a close block '## Close — <minute>' with HEAD, state, open and next to its session "
+        "record (the digest home, <span date>/session.md or <span date>/session-<suffix>.md, created under a '# <span date>' title when absent) "
         "and '<minute> | self | span-event | close; HEAD <head>; next: <next>' to its events file, in one act. HEAD is "
         "'<short sha> (clean)' or '<short sha> (dirty: <paths>)' from git status. A field's lines are separated by "
         "newlines. Reads .claude/memento.yaml, git, the events file and the session record; prints '<path>: <line>' per "
-        "line written. Refuses: no open span; a HEAD naming no commit; a state over the schema's state_max_lines (3); an empty field; a field line "
+        "line written. Refuses: a --span off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; "
+        "several open spans and no --span; a HEAD naming no commit; a state over the schema's state_max_lines (3); an empty field; a field line "
         "starting with a blank; a next of more than one line; a changed path whose name holds ', '; a clock behind the "
-        "events file's last line; a worktree; "
+        "events file's last line; the main span in a linked worktree (a suffixed span closes there); "
         "a file whose working copy edits a line HEAD holds; a schema whose structure or close labels memento does not know; "
         f"a schema close_label_width under {len(LONGEST_CLOSE_LABEL)}, the length of the longest close label '{LONGEST_CLOSE_LABEL}'."
     ),
@@ -295,10 +330,11 @@ def close(
     state: str = typer.Argument(..., help="Where the work stands, at most three lines."),
     open: str = typer.Argument(..., help="Waits, tripwires and delegations left open, or 'none'."),
     next: str = typer.Argument(..., help="The first step of the next span, one line."),
+    span: str | None = span_option(),
 ) -> None:
-    """Close the open span with its close block and close line."""
+    """Close a span with its close block and close line."""
     with refusals_reported():
-        written = close_span(ctx.obj, state, open, next)
+        written = close_span(ctx.obj, state, open, next, named_span(span))
     typer.echo(NEWLINE.join(line for path, text in written for line in written_lines(path, text)))
 
 
@@ -306,14 +342,22 @@ def close(
     "baseline",
     help=(
         "Print the newest close block across every session record under the digest home, as the record "
-        "holds it: the one under the latest span date, then with the latest minute, then the later in its record. "
-        "Prints nothing when no close block exists. Writes nothing and refuses nothing."
+        "holds it: the one under the latest span date, then with the latest minute, then in the record whose file name sorts last, "
+        "then the later in its record. With --span, only that span's session record is read. "
+        "Prints nothing when no close block exists. Reads .claude/memento.yaml and the session records; writes nothing. "
+        "Refuses: a --span off the '<date>[-<suffix>]' shape or naming no events file; a schema whose structure memento does not know."
     ),
 )
-def baseline(ctx: typer.Context) -> None:
+def baseline(ctx: typer.Context, span: str | None = span_option()) -> None:
     """Print the newest close block."""
     environment: Environment = ctx.obj
-    closed = newest_close_block(load_corpus(environment.store.root))
+    root = environment.store.root
+    with refusals_reported():
+        schema = agreeing_schema(root)
+        named = named_span(span)
+        if named is not None:
+            span_events(root, schema, named)
+        closed = newest_close_block(load_corpus(root), named)
     typer.echo(closed.text if closed else "", nl=False)
 
 
@@ -324,16 +368,17 @@ def refuse_repeated_title(failures_file: str, failures_text: str | None, title: 
         raise Refusal(f"failure '{title}' is already in {failures_file}")
 
 
-def add_failure(environment: Environment, title: str, what_happened: str, mechanism: str, correction: str) -> list[tuple[str, str]]:
+def add_failure(environment: Environment, title: str, what_happened: str, mechanism: str, correction: str, wanted: Span | None) -> list[tuple[str, str]]:
     """Append a failure entry to the open span's failures file and its failure line to its events file, in one act."""
     root = environment.store.root
     schema = agreeing_schema(root)
     refuse_disagreement(failure_labels_disagreement(schema))
     entry = construct(FailureEntry, title=title, what_happened=what_happened, mechanism=mechanism, correction=correction)
-    with environment.store.transaction() as act:
-        events_file, events_text = open_span_events(root, schema)
-        day = span_day(events_file)
-        failures_file = failures_file_for(schema, day)
+    span = open_span_events(root, schema, wanted).span
+    with span_transaction(environment.store, schema, span) as act:
+        _span, events_file, events_text = open_span_events(root, schema, span)
+        day = span.day
+        failures_file = span_path(schema, FAILURE_KIND, span)
         failures_text = text_if_present(root, failures_file)
         refuse_repeated_title(failures_file, failures_text, title)
         line = construct(EventLine, at=environment.now(), actor=Self_(), kind=FAILURE_EVENT, what=title)
@@ -348,12 +393,14 @@ def add_failure(environment: Environment, title: str, what_happened: str, mechan
     "add",
     help=(
         "Append a failure entry '## <title>' with its 'What happened:', 'Mechanism:' and 'Correction:' paragraphs to "
-        "the open span's failures file (the failure home, <span date>/failures.md, created under a "
+        "the open span's failures file (the failure home, <span date>/failures.md or <span date>/failures-<suffix>.md, created under a "
         "'# <span date> — failures' title when absent) and '<minute> | self | failure | <title>' to its events file, in "
         "one act. Reads .claude/memento.yaml, the events file and the failures file; prints '<path>: <line>' per line "
         "written. Refuses: a part that is empty, more than one line, or starting with a blank; a title already in the "
-        "failures file; no open span; a clock behind the events file's last line; a worktree; a file whose working copy "
-        "edits a line HEAD holds; a schema whose structure or failure labels memento does not know."
+        "failures file; a --span off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; "
+        "several open spans and no --span; a clock behind the events file's last line; the main span in a linked worktree "
+        "(a suffixed span writes there); a file whose working copy edits a line HEAD holds; a schema whose structure or "
+        "failure labels memento does not know."
     ),
 )
 def add_failure_entry(
@@ -362,8 +409,9 @@ def add_failure_entry(
     what_happened: str = typer.Argument(..., help="What happened, one line."),
     mechanism: str = typer.Argument(..., help="The mechanism behind it, one line."),
     correction: str = typer.Argument(..., help="The correction, one line."),
+    span: str | None = span_option(),
 ) -> None:
     """Append a failure entry and its events line."""
     with refusals_reported():
-        written = add_failure(ctx.obj, title, what_happened, mechanism, correction)
+        written = add_failure(ctx.obj, title, what_happened, mechanism, correction, named_span(span))
     typer.echo(NEWLINE.join(line for path, text in written for line in written_lines(path, text)))

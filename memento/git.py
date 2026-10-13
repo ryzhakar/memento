@@ -37,6 +37,17 @@ def is_worktree(root: Path) -> bool:
     return git_directory(root, "--git-dir") != git_directory(root, "--git-common-dir")
 
 
+def main_checkout(root: Path) -> Path:
+    """The repository's own checkout: the first worktree git lists, whichever linked worktree root is."""
+    first = git_output(root, "worktree", "list", "--porcelain").splitlines()[0]
+    return Path(first.removeprefix("worktree ")).resolve()
+
+
+def tracks(root: Path, path: str) -> bool:
+    """Whether git tracks a file or any file beneath a directory, the path read literally."""
+    return bool(git_output(root, "ls-files", "--", f":(literal){path}").strip())
+
+
 def file_at_head(root: Path, path: str) -> bytes | None:
     """The bytes HEAD holds at a path, or None when HEAD holds none."""
     shown = git_exit_status(root, "show", f"HEAD:{path}")

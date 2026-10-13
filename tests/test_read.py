@@ -38,12 +38,12 @@ def test_patdown_reports_what_moved_since_the_newest_close(record_tree: Path) ->
                 "open    none",
                 "next    review",
                 "",
-                "tail",
+                "tail 2026-10-01",
                 "2026-10-01T19:00 | self | span-event | open; the evening",
                 "",
                 "found",
                 f"HEAD    {found}",
-                "span    open since 2026-10-01T19:00",
+                "span    2026-10-01 open since 2026-10-01T19:00",
                 "",
                 "anomalies",
                 f"commit  {pieces} edit capabilities",
@@ -51,7 +51,7 @@ def test_patdown_reports_what_moved_since_the_newest_close(record_tree: Path) ->
                 f"dirty   + {HISTORY}/2026-10-01/events.md",
                 "dirty   + draft.txt",
                 "dirty   - notes.txt",
-                "span    open since 2026-10-01T19:00; the baseline closed it at 2026-10-01T10:30",
+                "span    2026-10-01 open since 2026-10-01T19:00; the baseline closed it at 2026-10-01T10:30",
                 "check   0 FAIL",
                 "",
             ]
@@ -79,15 +79,15 @@ def test_patdown_names_a_baseline_close_block_it_cannot_read(record_tree: Path) 
 def test_patdown_with_no_close_block_reports_against_no_baseline(record_tree: Path) -> None:
     (record_tree / f"{HISTORY}/2026-09-30/session.md").write_text("# 2026-09-30\n", encoding="utf-8")
     stdout = run_memento(record_tree, "patdown").stdout
-    assert stdout.startswith("baseline\nnone\n\ntail\n")
-    assert f"dirty   + {HISTORY}/2026-09-30/session.md\nspan    open since 2026-10-01T09:00\ncheck   " in stdout
+    assert stdout.startswith("baseline\nnone\n\ntail 2026-10-01\n")
+    assert f"dirty   + {HISTORY}/2026-09-30/session.md\nspan    2026-10-01 open since 2026-10-01T09:00\ncheck   " in stdout
 
 
 def test_patdown_takes_the_later_written_of_close_blocks_stamped_one_minute_as_its_baseline(record_tree: Path) -> None:
     run_memento(record_tree, "digest", "close", "s", "o", "first")
     run_memento(record_tree, "events", "open", "again")
     run_memento(record_tree, "digest", "close", "s", "o", "second")
-    assert "open    o\nnext    second\n\ntail\n" in run_memento(record_tree, "patdown").stdout
+    assert "open    o\nnext    second\n\ntail 2026-10-01\n" in run_memento(record_tree, "patdown").stdout
 
 
 def test_patdown_where_head_names_no_commit_is_refused(record_tree: Path) -> None:

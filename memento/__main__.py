@@ -41,6 +41,7 @@ CHECKS: tuple[Check, ...] = (
     living.check_results_table,
     journal_checks.check_failures,
     journal_checks.check_spans_closed_in_digest,
+    journal_checks.check_span_file_names,
     journal_checks.check_journal_history,
     pointers.check_pointers,
     pointers.check_budgets,

@@ -22,6 +22,7 @@ HISTORY = "docs/orchestration_log/history"
         (f"{HISTORY}/2026-10-08/events-parallel.md", "events"),
         (f"{HISTORY}/2026-10-08/session.md", "digest"),
         (f"{HISTORY}/2026-10-08/failures.md", "failure"),
+        (f"{HISTORY}/2026-10-08/failures-parallel.md", "failure"),
         (f"{HISTORY}/2026-09-06/frontier-questions-and-verdicts.md", "report"),
         (f"{HISTORY}/2026-09-06/nested/notes.md", "report"),
         ("docs/orchestration_log/recon/2026-10-08/specs/memento-module.md", "scratch"),

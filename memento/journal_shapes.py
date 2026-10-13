@@ -18,6 +18,7 @@ RoutedKind = Literal["span-event", "failure", "change"]
 SPAN_EVENT, FAILURE_EVENT, CHANGE_EVENT = get_args(RoutedKind)
 EVENTS_SHAPE = "not 'YYYY-MM-DDTHH:MM | actor | kind | what'"
 EVENT_FIELD_SEPARATOR = " | "
+MINUTE_WIDTH = len("YYYY-MM-DDTHH:MM")
 EVENT_FIELDS = 4
 MINUTE_FIELD = 0
 ACTOR_FIELD = 1

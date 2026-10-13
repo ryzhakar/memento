@@ -41,12 +41,13 @@ def normalized(path: str | PurePath) -> str:
 
 @dataclass(frozen=True)
 class Corpus:
-    """The records a check reads: the schema, the tracked paths, and the working tree beneath root with changes over it."""
+    """The records a check reads: the schema, the tracked paths, and the working tree beneath root with changes over it; main_root names the main checkout when root is a linked worktree."""
 
     root: Path
     schema: dict[str, Any]
     tracked: list[str]
     changes: Mapping[str, str | None] = field(default_factory=dict)
+    main_root: Path | None = None
 
     def substituted(self, changes: Mapping[str, str | None]) -> "Corpus":
         """This corpus with changed files' texts over the working tree and among the tracked paths, None meaning deleted."""
@@ -55,6 +56,13 @@ class Corpus:
         tracked = sorted((set(self.tracked) - deleted) | (set(merged) - deleted))
         return replace(self, changes=merged, tracked=tracked)
 
+    def locate(self, path: str) -> Path:
+        """Where a project-relative path is read: beneath root, or beneath the main checkout for a path a linked worktree neither holds nor git tracks."""
+        here = self.root / path
+        if self.main_root is None or here.exists() or git.tracks(self.root, path):
+            return here
+        return self.main_root / path
+
     def text(self, path: str) -> str:
         """The text of a project-relative file."""
         if path in self.changes:
@@ -62,29 +70,29 @@ class Corpus:
             if changed is None:
                 raise FileNotFoundError(f"{path} is deleted in this corpus")
             return changed
-        return (self.root / path).read_text(encoding="utf-8")
+        return self.locate(path).read_text(encoding="utf-8")
 
     def raw(self, path: str) -> bytes:
         """The bytes of a project-relative file."""
         if path in self.changes:
             return self.text(path).encode("utf-8")
-        return (self.root / path).read_bytes()
+        return self.locate(path).read_bytes()
 
     def exists(self, path: str) -> bool:
         """Whether a project-relative path exists in the working tree."""
         if path in self.changes:
             return self.changes[path] is not None
-        return (self.root / path).exists()
+        return self.locate(path).exists()
 
     def is_file(self, path: str) -> bool:
         """Whether a project-relative path is a regular file in the working tree."""
         if path in self.changes:
             return self.changes[path] is not None
-        return (self.root / path).is_file()
+        return self.locate(path).is_file()
 
     def is_dir(self, path: str) -> bool:
         """Whether a project-relative path is a directory in the working tree."""
-        return (self.root / path).is_dir()
+        return self.locate(path).is_dir()
 
     def glob(self, pattern: str) -> list[str]:
         """The project-relative paths a glob pattern matches, sorted as paths."""

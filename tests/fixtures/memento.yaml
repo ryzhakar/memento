@@ -174,7 +174,7 @@ kinds:
     close_label_width: 8
     state_max_lines: 3
   failure:
-    home: docs/orchestration_log/history/{date}/failures.md
+    home: docs/orchestration_log/history/{date}/failures*.md
     tier: journal
     load: latent
     verification: witnessed

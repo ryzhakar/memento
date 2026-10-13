@@ -7,8 +7,8 @@ from memento.findings import FAIL, Corpus, run_checks, split_entries
 from memento.git import git_output
 from memento.journal_git import found_head
 from memento.journal_shapes import HEAD_LABEL, NEWLINE, Head, parse_close_block
-from memento.journal_spans import ClosedSpan, events_tail, newest_close_block, newest_events_file, open_since
-from memento.schema import load_corpus
+from memento.journal_spans import ClosedSpan, SpanEvents, events_tail, newest_close_block, open_since, open_spans, reported_spans, span_path
+from memento.schema import DIGEST_KIND, Schema, load_corpus
 
 FIELD_WIDTH = len("commit  ")
 COMMIT_ROW = "commit"
@@ -22,10 +22,11 @@ NO_BASELINE = "none"
 CLOSED_SPAN = "closed"
 SECTION_SEPARATOR = "\n\n"
 PATDOWN_HELP = (
-    "Pat down the records: print the baseline (the newest close block), the events tail (the newest span from its last "
-    "span-event line), the found state (HEAD with the paths git reports changed, and whether a span is open), and the "
-    "anomalies against the baseline: each commit since the baseline's HEAD, each changed path added or gone since it, "
-    "a span open since it closed, and the count of FAIL findings 'memento check' reports. Reads "
+    "Pat down the records: print the baseline (the newest close block), one events tail per open span (the newest span "
+    "when none is open) from its last span-event line, the found state (HEAD with the paths git reports changed, and "
+    "every open span with the minute it opened), and the anomalies against the baseline: each commit since the "
+    "baseline's HEAD, each changed path added or gone since it, each open span the baseline closed (or every open span "
+    "when there is no baseline), and the count of FAIL findings 'memento check' reports. Reads "
     ".claude/memento.yaml, every record, and git. Writes nothing. Refuses only a repository whose HEAD names no commit."
 )
 
@@ -67,11 +68,26 @@ def baseline_anomalies(corpus: Corpus, closed: ClosedSpan | None, found: Head) -
     return commits_since(corpus, head) + dirty_moves(head, found)
 
 
-def span_anomalies(closed: ClosedSpan | None, since: str | None) -> list[str]:
-    """A line naming the newest span open where the baseline closed one, or none."""
-    if since is None:
-        return []
-    return [labelled(SPAN_ROW, f"open since {since}; the baseline closed it at {closed.minute}" if closed else f"open since {since}")]
+def span_anomalies(schema: Schema, closed: ClosedSpan | None, opened: list[SpanEvents]) -> list[str]:
+    """A line for each open span the baseline does not account for, or that it closed."""
+    lines = []
+    for found in opened:
+        since = f"{found.span.name} open since {open_since(found.text)}"
+        if closed is None:
+            lines.append(labelled(SPAN_ROW, since))
+        elif span_path(schema, DIGEST_KIND, found.span) == closed.file:
+            lines.append(labelled(SPAN_ROW, f"{since}; the baseline closed it at {closed.minute}"))
+    return lines
+
+
+def tail_sections(reported: list[SpanEvents]) -> list[list[str]]:
+    """One tail section per reported span, or an empty one when no span has an events file."""
+    return [[f"tail {found.span.name}", events_tail(found.text).rstrip(NEWLINE)] for found in reported] or [["tail", ""]]
+
+
+def span_rows(opened: list[SpanEvents]) -> list[str]:
+    """One found-state row per open span, or one saying every span is closed."""
+    return [labelled(SPAN_ROW, f"{found.span.name} open since {open_since(found.text)}") for found in opened] or [labelled(SPAN_ROW, CLOSED_SPAN)]
 
 
 def patdown_report(environment: Environment) -> str:
@@ -79,15 +95,13 @@ def patdown_report(environment: Environment) -> str:
     corpus = load_corpus(environment.store.root)
     closed = newest_close_block(corpus)
     found = found_head(environment.run_git, corpus.root)
-    events_file = newest_events_file(corpus.root, corpus.schema)
-    events_text = corpus.text(events_file) if events_file else ""
-    since = open_since(events_text)
+    opened = open_spans(corpus.root, corpus.schema)
     failures = sum(finding.level == FAIL for finding in run_checks(corpus, environment.checks))
-    anomalies = [*baseline_anomalies(corpus, closed, found), *span_anomalies(closed, since), labelled(CHECK_ROW, f"{failures} {FAIL}")]
+    anomalies = [*baseline_anomalies(corpus, closed, found), *span_anomalies(corpus.schema, closed, opened), labelled(CHECK_ROW, f"{failures} {FAIL}")]
     sections = [
         ["baseline", closed.text.rstrip(NEWLINE) if closed else NO_BASELINE],
-        ["tail", events_tail(events_text).rstrip(NEWLINE)],
-        ["found", labelled(HEAD_LABEL, found.render()), labelled(SPAN_ROW, f"open since {since}" if since else CLOSED_SPAN)],
+        *tail_sections(reported_spans(corpus.root, corpus.schema)),
+        ["found", labelled(HEAD_LABEL, found.render()), *span_rows(opened)],
         ["anomalies", *anomalies],
     ]
     return SECTION_SEPARATOR.join(NEWLINE.join(section) for section in sections) + NEWLINE

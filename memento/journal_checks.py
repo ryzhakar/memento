@@ -22,17 +22,19 @@ from memento.journal_shapes import (
 )
 from memento.journal_spans import (
     SPAN_CLOSING,
+    SPAN_FILE_NAME,
     SPAN_MARK_END,
     SPAN_OPENING,
-    events_file_for,
-    session_file_for,
     span_marks,
+    span_of,
+    span_path,
 )
 from memento.project import history_glob, project_of
-from memento.schema import SCHEMA_HOME
+from memento.schema import DIGEST_KIND, EVENTS_KIND, FAILURE_KIND, SCHEMA_HOME
 
 
 SHORT_SHA_WIDTH = 8
+SPAN_FILE_PATTERNS = ((EVENTS_KIND, "events*.md"), (DIGEST_KIND, "session*.md"), (FAILURE_KIND, "failures*.md"))
 
 
 def written_after_ratification(corpus: Corpus, pattern: str) -> list[str]:
@@ -92,14 +94,17 @@ def check_failures(corpus: Corpus) -> Iterator[Finding]:
     disagreement = failure_labels_disagreement(corpus.schema)
     if disagreement is not None:
         yield fail(SCHEMA_HOME, disagreement)
-    for path in written_after_ratification(corpus, "failures.md"):
+    for path in written_after_ratification(corpus, "failures*.md"):
         entries = list(split_entries(corpus.text(path)))
         for line_number, header, body in entries:
             try:
                 parse_failure_entry(header, body)
             except Refusal as unreadable:
                 yield fail(f"{path}:{line_number}", str(unreadable))
-        events_file = events_file_for(corpus.schema, PurePosixPath(path).parent.name)
+        span = span_of(corpus.schema, FAILURE_KIND, path)
+        if span is None:
+            continue
+        events_file = span_path(corpus.schema, EVENTS_KIND, span)
         events_lines = corpus.text(events_file).splitlines() if corpus.exists(events_file) else []
         pointers = sum(event_fields_of_kind(line, FAILURE_EVENT) is not None for line in events_lines)
         if pointers < len(entries):
@@ -109,11 +114,22 @@ def check_failures(corpus: Corpus) -> Iterator[Finding]:
 def check_spans_closed_in_digest(corpus: Corpus) -> Iterator[Finding]:
     """Fail events files recording more span closes than their session record holds close blocks."""
     for events_file in written_after_ratification(corpus, "events*.md"):
+        span = span_of(corpus.schema, EVENTS_KIND, events_file)
+        if span is None:
+            continue
         closes = sum(mark.mark == SPAN_CLOSING for mark in span_marks(corpus.text(events_file)))
-        digest = session_file_for(events_file)
+        digest = span_path(corpus.schema, DIGEST_KIND, span)
         blocks = sum(line.startswith(CLOSE_HEADING) for line in corpus.text(digest).splitlines()) if corpus.exists(digest) else 0
         if closes > blocks:
             yield fail(events_file, f"{closes} span closes but {blocks} close blocks in {digest}")
+
+
+def check_span_file_names(corpus: Corpus) -> Iterator[Finding]:
+    """Fail events, session and failures files written after ratification whose names carry no valid span."""
+    for kind, pattern in SPAN_FILE_PATTERNS:
+        for path in written_after_ratification(corpus, pattern):
+            if span_of(corpus.schema, kind, path) is None:
+                yield fail(path, SPAN_FILE_NAME)
 
 
 def check_journal_history(corpus: Corpus) -> Iterator[Finding]:

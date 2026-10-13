@@ -110,7 +110,7 @@ def test_the_ratification_date_sets_when_history_stops_admitting_other_artifacts
     notes = f"{HISTORY}/2026-09-30/notes.md"
     (record_tree / notes).write_text("# notes\n", encoding="utf-8")
     commit_tree(record_tree, "a report after ratification")
-    assert check_lines(record_tree) == [f"FAIL  {notes}  history/ admits only session*, events* and failures.md after 2026-09-23; other artifacts go to recon/"]
+    assert check_lines(record_tree) == [f"FAIL  {notes}  history/ admits only session*, events* and failures* after 2026-09-23; other artifacts go to recon/"]
     rewrite_project(record_tree, ratified_on="2026-09-30")
     assert check_lines(record_tree) == []
 

@@ -204,7 +204,7 @@ def check_history_admission(corpus: Corpus) -> Iterator[Finding]:
             continue
         is_journal = any(fnmatch.fnmatch(parts[file_part], pattern) for pattern in JOURNAL_FILE_PATTERNS)
         if len(parts) != file_part + 1 or not is_journal:
-            yield fail(path, f"{history_name} admits only session*, events* and failures.md after {ratified_on}; other artifacts go to {bench_name}")
+            yield fail(path, f"{history_name} admits only session*, events* and failures* after {ratified_on}; other artifacts go to {bench_name}")
 
 
 def check_nul_bytes(corpus: Corpus) -> Iterator[Finding]:

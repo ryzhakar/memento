@@ -118,7 +118,7 @@ def test_a_design_file_in_history_fails_history_admission(record_tree: Path) -> 
     git(record_tree, "add", f"{OPEN_SPAN}/design.md")
     assert_single_failure(
         record_tree,
-        f"FAIL  {OPEN_SPAN}/design.md  history/ admits only session*, events* and failures.md after 2026-09-23; "
+        f"FAIL  {OPEN_SPAN}/design.md  history/ admits only session*, events* and failures* after 2026-09-23; "
         "other artifacts go to recon/",
     )
 
