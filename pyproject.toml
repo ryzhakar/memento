@@ -1,6 +1,6 @@
 [project]
 name = "memento"
-version = "0.2.0"
+version = "0.2.1"
 description = "Typed reads and writes of a project's records, checked against the schema in its .claude/memento.yaml"
 readme = "README.md"
 requires-python = ">=3.12"
