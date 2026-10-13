@@ -27,6 +27,7 @@ JOURNAL_VERBS = {
     "events tail": ("events", "tail"),
     "digest add": ("digest", "add", "a paragraph"),
     "digest close": ("digest", "close", "s", "o", "n"),
+    "digest baseline": ("digest", "baseline"),
     "failure add": ("failure", "add", *FAILURE_PARTS),
 }
 
@@ -111,10 +112,17 @@ def test_an_omitted_span_with_several_open_is_refused_naming_every_open_span(rec
     assert tree_bytes(record_tree) == before
 
 
-def test_the_baseline_with_several_spans_open_is_still_the_newest_close_block(record_tree: Path) -> None:
+def test_the_baseline_of_a_named_span_is_read_while_several_spans_are_open(record_tree: Path) -> None:
     open_side(record_tree)
+    result = run_memento(record_tree, "digest", "baseline", "--span", "2026-09-30")
+    assert (result.exit_code, result.stdout.splitlines()[0]) == (0, "## Close — 2026-09-30T18:00")
+
+
+def test_the_baseline_with_one_span_open_is_still_the_newest_close_block_across_every_session_record(record_tree: Path) -> None:
     result = run_memento(record_tree, "digest", "baseline")
     assert (result.exit_code, result.stdout.splitlines()[0]) == (0, "## Close — 2026-09-30T18:00")
+    close_open_span(record_tree)
+    assert run_memento(record_tree, "digest", "baseline").stdout == result.stdout
 
 
 def test_a_span_naming_no_events_file_is_refused(record_tree: Path) -> None:

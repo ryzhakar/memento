@@ -42,8 +42,10 @@ from memento.journal_spans import (
     newest_close_block,
     open_since,
     open_span_events,
+    open_spans,
     parse_span,
     read_span_events,
+    several_open,
     span_events,
     span_files,
     span_path,
@@ -67,6 +69,7 @@ FAILURES_TITLE = "# {day} — failures\n"
 AFTER_CLOSE_HEADING = "## After the {time} close\n"
 EVENT_KIND_ADAPTER = TypeAdapter(EventKind)
 SPAN_HELP = "The span to act on: '<date>' or '<date>-<suffix>'. Omitted, the only open span; required while several are open."
+BASELINE_SPAN_HELP = "Read only this span's session record: '<date>' or '<date>-<suffix>'. Omitted, every session record; required while several spans are open."
 
 
 def span_option() -> str | None:
@@ -345,10 +348,11 @@ def close(
         "holds it: the one under the latest span date, then with the latest minute, then in the record whose file name sorts last, "
         "then the later in its record. With --span, only that span's session record is read. "
         "Prints nothing when no close block exists. Reads .claude/memento.yaml and the session records; writes nothing. "
-        "Refuses: a --span off the '<date>[-<suffix>]' shape or naming no events file; a schema whose structure memento does not know."
+        "Refuses: a --span off the '<date>[-<suffix>]' shape or naming no events file; several open spans and no --span; "
+        "a schema whose structure memento does not know."
     ),
 )
-def baseline(ctx: typer.Context, span: str | None = span_option()) -> None:
+def baseline(ctx: typer.Context, span: str | None = typer.Option(None, "--span", help=BASELINE_SPAN_HELP)) -> None:
     """Print the newest close block."""
     environment: Environment = ctx.obj
     root = environment.store.root
@@ -357,6 +361,9 @@ def baseline(ctx: typer.Context, span: str | None = span_option()) -> None:
         named = named_span(span)
         if named is not None:
             span_events(root, schema, named)
+        opened = open_spans(root, schema)
+        if named is None and len(opened) > 1:
+            raise Refusal(several_open(opened))
         closed = newest_close_block(load_corpus(root), named)
     typer.echo(closed.text if closed else "", nl=False)
 
