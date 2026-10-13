@@ -307,6 +307,7 @@ def test_add_refuses_an_entry_file_with_a_key_that_is_not_text(record_tree: Path
         ("age", "already exist"),
         ("repair", "holds no FAIL of the change-log check"),
         ("repair", "a merged sha that git does not know as an ancestor of the project's main branch"),
+        ("set", "a merged sha that git does not know as an ancestor of the project's main branch"),
     ],
 )
 def test_each_change_verb_help_names_its_refusals(record_tree: Path, verb: str, refusal: str) -> None:
@@ -980,7 +981,7 @@ def test_repair_writes_no_blank_line_after_the_header_of_the_entry_it_replaces(r
     assert run_memento(record_tree, "check").exit_code == 0
 
 
-SAMPLE_FIELDS_NAMED = "KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE, SUPERSEDED-BY"
+SAMPLE_FIELDS_NAMED = "KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE, SUPERSEDED-BY, merged"
 FROZEN_BASE_PREFIX = "2026-04-09 — The frozen base"
 
 
@@ -1104,3 +1105,34 @@ def test_change_set_refuses_in_a_worktree(record_tree: Path, tmp_path: Path) -> 
     git(record_tree, "worktree", "add", "-q", str(worktree))
     result = run_memento(worktree, "change", "set", FROZEN_BASE_PREFIX, "WHY", "x")
     assert (result.exit_code, "records are written in the root checkout only" in result.stderr) == (1, True)
+
+
+def unmerged_message(sha: str) -> str:
+    """The refusal naming a sha that is no ancestor of main."""
+    return f"{sha} is not on main; an entry is written after its change is merged"
+
+
+@pytest.mark.parametrize("unmerged_sha", ["side", "0" * 40])
+def test_change_set_of_merged_refuses_a_sha_that_is_not_on_main(record_tree: Path, unmerged_sha: str) -> None:
+    sha = commit_off_main(record_tree) if unmerged_sha == "side" else unmerged_sha
+    assert_set_refused(record_tree, unmerged_message(sha), FROZEN_BASE_PREFIX, "merged", sha)
+
+
+def test_change_set_of_merged_with_a_sha_on_main_leaves_the_entry_as_it_stands(record_tree: Path) -> None:
+    commit_off_main(record_tree)
+    before = log_text(record_tree)
+    result = run_memento(record_tree, "change", "set", FROZEN_BASE_PREFIX, "merged", head_sha(record_tree))
+    assert (result.exit_code, result.stdout) == (0, "docs/architecture_log.md\n")
+    assert log_text(record_tree) == before
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_change_set_of_merged_refuses_a_value_that_is_empty_or_blank(record_tree: Path, value: str) -> None:
+    assert_set_refused(record_tree, "merged is empty", FROZEN_BASE_PREFIX, "merged", value)
+
+
+def test_change_set_of_another_field_asks_no_merged_proof_of_its_value(record_tree: Path) -> None:
+    unmerged = commit_off_main(record_tree)
+    result = run_memento(record_tree, "change", "set", FROZEN_BASE_PREFIX, "EVIDENCE", f"commit {unmerged}")
+    assert result.exit_code == 0
+    assert f"EVIDENCE:      commit {unmerged}\n" in log_text(record_tree)

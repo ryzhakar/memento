@@ -35,6 +35,8 @@ ENTRY_DATE = re.compile(rf"(?m)^## ({DATE})")
 ENTRY_DATE_FIELD = re.compile(rf"(?m)^\w+: (?P<text>{DATE})$")
 
 FIELD_LABELS: tuple[str, ...] = ("KIND", "FROM → TO", "WHY", "INVALIDATES", "EVIDENCE", "SUPERSEDED-BY")
+MERGED_FIELD = "merged"
+SETTABLE_FIELDS: tuple[str, ...] = (*FIELD_LABELS, MERGED_FIELD)
 FIELD_ATTRS: tuple[str, ...] = ("kind", "from_to", "why", "invalidates", "evidence", "superseded_by")
 ATTR_FOR_LABEL: dict[str, str] = dict(zip(FIELD_LABELS, FIELD_ATTRS))
 CANONICAL_LEADING_BLANK_LINES = 0
@@ -324,11 +326,11 @@ def refuse_future_date(label: str, value: date | None, today: date) -> None:
         raise Refusal(f"{label} {value.isoformat()} is after today ({today.isoformat()})")
 
 
-def refuse_unmerged_entry(root: Path, schema: Schema, data: NewEntryInput) -> None:
-    """Refuse an entry whose `merged` sha git does not know as an ancestor of the project's main branch."""
+def refuse_unmerged_sha(root: Path, schema: Schema, sha: str) -> None:
+    """Refuse a `merged` sha that git does not know as an ancestor of the project's main branch."""
     main_branch = project_of(schema).main_branch
-    if git_exit_status(root, "merge-base", "--is-ancestor", data.merged, main_branch).returncode != 0:
-        raise Refusal(f"{data.merged} is not on {main_branch}; an entry is written after its change is merged")
+    if git_exit_status(root, "merge-base", "--is-ancestor", sha, main_branch).returncode != 0:
+        raise Refusal(f"{sha} is not on {main_branch}; an entry is written after its change is merged")
 
 
 def change_spec(environment: Environment) -> tuple[Path, Schema, Mapping[str, Any]]:
@@ -414,7 +416,7 @@ def append_entry(environment: Environment, entry_path: Path) -> str:
     today = environment.now().date()
     refuse_future_date("start", entry.start, today)
     refuse_future_date("end", entry.end, today)
-    refuse_unmerged_entry(root, schema, data)
+    refuse_unmerged_sha(root, schema, data.merged)
     seamed = "" if last is None else with_closing_seam(last).render(width=width)
     new_text = prefix + "".join(raws[:-1]) + seamed + entry.render(width=width)
     with environment.store.transaction() as act:
@@ -530,15 +532,19 @@ def refuse_blank_value(label: str, value: str) -> None:
 
 def set_entry_field(environment: Environment, header_prefix: str, field: str, value: str) -> str:
     """Set one field of the one entry whose header starts with header_prefix, the whole new entry built from its own fields and validated as repair validates a replacement, returning the change log's path."""
-    root, _schema, spec = change_spec(environment)
-    label = known_name("change", "field", field, FIELD_LABELS)
+    root, schema, spec = change_spec(environment)
+    label = known_name("change", "field", field, SETTABLE_FIELDS)
     refuse_blank_value(label, value)
     path, width = spec["home"], spec["label_width"]
     corpus = load_corpus(root)
     prefix, raws = split_log(corpus.text(path))
     index = header_index(raws, header_prefix)
     entry = parsed_entry(raws[index], header_prefix, spec)
-    updated = construct(ChangeEntry, **{**entry.model_dump(), ATTR_FOR_LABEL[label]: value})
+    if label == MERGED_FIELD:
+        refuse_unmerged_sha(root, schema, value)
+        updated = entry
+    else:
+        updated = construct(ChangeEntry, **{**entry.model_dump(), ATTR_FOR_LABEL[label]: value})
     land_entry_replacement(environment, corpus, path, prefix, raws, index, updated.render(width=width))
     return path
 
@@ -561,7 +567,7 @@ def repair_entry(environment: Environment, header_prefix: str, entry_path: Path)
     refuse_quoted_date("end", raw.get("end"))
     data = entry_input(raw)
     entry = new_entry(data)
-    refuse_unmerged_entry(root, schema, data)
+    refuse_unmerged_sha(root, schema, data.merged)
     trailing = CANONICAL_FINAL_TRAILING_BLANK_LINES if index == len(raws) - 1 else CANONICAL_TRAILING_BLANK_LINES
     replacement = entry.model_copy(update={"trailing_blank_lines": trailing}).render(width=width)
     land_entry_replacement(environment, corpus, path, prefix, raws, index, replacement)
@@ -685,12 +691,13 @@ def age(ctx: typer.Context, quiet: bool = quiet_option()) -> None:
 @change_group.command(
     "set",
     help=(
-        "Set one field (KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE or SUPERSEDED-BY) of the one entry whose header line "
+        "Set one field (KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE, SUPERSEDED-BY, or merged) of the one entry whose header line "
         "starts with <header-prefix> (the text after '## ') to a value: the whole new entry is built from the entry's own "
         "fields with that field replaced, validated as 'change repair' validates a replacement, and landed in place with "
-        "the blank lines it had; a multi-line value separates its lines by newlines. Reads .claude/memento.yaml and the change log; "
+        "the blank lines it had; a multi-line value separates its lines by newlines; merged is a sha checked as 'change add' checks it "
+        "and not written, so setting it leaves the entry as it stands. Reads .claude/memento.yaml and the change log; "
         "prints the path written. Refuses: a field the schema does not declare (naming the fields); a value that is empty "
-        "or blank; zero or several entries whose header line starts with <header-prefix>; an entry that does not parse "
+        "or blank; a merged sha that git does not know as an ancestor of the project's main branch; zero or several entries whose header line starts with <header-prefix>; an entry that does not parse "
         "('change repair' replaces it); a replacement that holds a FAIL of the change-log check, named; a candidate FAIL "
         "elsewhere; a schema whose change fields differ from memento's; a worktree."
     ),
@@ -698,7 +705,7 @@ def age(ctx: typer.Context, quiet: bool = quiet_option()) -> None:
 def set_field(
     ctx: typer.Context,
     header_prefix: str = typer.Argument(..., help="The start of the entry's header line, the text after '## '."),
-    field: str = typer.Argument(..., help="The field to set: KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE or SUPERSEDED-BY."),
+    field: str = typer.Argument(..., help="The field to set: KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE, SUPERSEDED-BY or merged."),
     value: str = typer.Argument(..., help="The field's new value; lines of a multi-line one are separated by newlines."),
     quiet: bool = quiet_option(),
 ) -> None:

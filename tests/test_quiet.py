@@ -177,7 +177,7 @@ def test_the_same_write_verb_without_quiet_prints_its_result(record_tree: Path, 
     ("arguments", "message"),
     [
         (("events", "add", "self", "decided", "x"), "'decided' is not an event kind (decision, discovery, commitment, delegation, receipt, attenuation)"),
-        (("change", "set", FROZEN_BASE_PREFIX, "NOTE", "x"), "'NOTE' is not a change field; the fields are: KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE, SUPERSEDED-BY"),
+        (("change", "set", FROZEN_BASE_PREFIX, "NOTE", "x"), "'NOTE' is not a change field; the fields are: KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE, SUPERSEDED-BY, merged"),
         (("results", "drop", "nope", "nowhere"), "no row in docs/results.md carries key ('nope', 'nowhere')"),
         (("directive", "drop", "no-such-rule"), "rule 'no-such-rule' is not in docs/conventions.md"),
         (("spec", "archive", "none"), "'docs/specs/none.md' does not exist"),
