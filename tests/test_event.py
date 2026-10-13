@@ -171,3 +171,78 @@ def test_the_clock_is_read_while_the_record_lock_is_held(record_tree: Path) -> N
     environment = Environment(store=Store(root=record_tree, replace_file=os.replace), now=clock_probing_the_lock, checks=CHECKS, run_git=git_exit_status)
     result = CliRunner().invoke(app, ["events", "add", "self", "decision", "x"], obj=environment)
     assert (result.exit_code, observed) == (0, [True])
+
+
+STDIN_EVENTS = "owner | decision | the first is decided\nagent:J-b | receipt | verdict: APPROVE | 2 minors\ntool:just | discovery | the third is found\n"
+STDIN_LINES = [
+    "2026-10-01T10:30 | owner | decision | the first is decided",
+    "2026-10-01T10:30 | agent:J-b | receipt | verdict: APPROVE | 2 minors",
+    "2026-10-01T10:30 | tool:just | discovery | the third is found",
+]
+
+
+def test_stdin_lands_one_event_per_line_in_one_act_and_prints_each(record_tree: Path) -> None:
+    before = (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8")
+    result = run_memento(record_tree, "events", "add", "--stdin", stdin=STDIN_EVENTS)
+    assert (result.exit_code, result.stdout) == (0, "".join(f"{OPEN_EVENTS_FILE}: {line}\n" for line in STDIN_LINES))
+    assert (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8") == before + "".join(f"{line}\n" for line in STDIN_LINES)
+
+
+def assert_batch_refused(root: Path, message: str, stdin: str, *args: str, now: datetime = FIXED_NOW) -> None:
+    """Assert `events add --stdin` refuses with this message on stderr alone and lands none of the batch."""
+    before = (root / OPEN_EVENTS_FILE).read_bytes()
+    result = run_memento(root, "events", "add", "--stdin", *args, now=now, stdin=stdin)
+    assert (result.exit_code, result.stdout, result.stderr) == (1, "", f"refused: {message}\n")
+    assert (root / OPEN_EVENTS_FILE).read_bytes() == before
+
+
+VALID_FIRST_TWO = "owner | decision | the first is decided\nself | decision | the second is decided\n"
+
+
+@pytest.mark.parametrize(
+    ("third", "message"),
+    [
+        ("Owner | decision | x", "stdin line 3: actor 'Owner' is not owner, self, agent:<name> or tool:<name>"),
+        ("self | decided | x", "stdin line 3: 'decided' is not an event kind (decision, discovery, commitment, delegation, receipt, attenuation)"),
+        ("self | failure | x", "stdin line 3: a failure is written by 'memento failure add', which writes its entry and its events line together"),
+        ("self | decision |  indented", "stdin line 3: what must start with a visible character"),
+        ("self | decision", "stdin line 3 is not '<actor> | <kind> | <what>'"),
+        ("self decision x", "stdin line 3 is not '<actor> | <kind> | <what>'"),
+        ("", "stdin line 3 is not '<actor> | <kind> | <what>'"),
+    ],
+)
+def test_one_invalid_line_refuses_the_whole_batch_naming_its_line_number(record_tree: Path, third: str, message: str) -> None:
+    assert_batch_refused(record_tree, message, VALID_FIRST_TWO + third + "\n")
+
+
+def test_a_stdin_that_holds_no_line_is_refused(record_tree: Path) -> None:
+    assert_batch_refused(record_tree, "stdin holds no event line", "")
+
+
+def test_a_clock_behind_the_events_files_last_line_refuses_the_whole_batch(record_tree: Path) -> None:
+    behind = datetime.fromisoformat("2026-10-01T09:09:59+02:00")
+    message = "the clock reads 2026-10-01T09:09, before the events file's last line at 2026-10-01T09:10"
+    assert_batch_refused(record_tree, message, VALID_FIRST_TWO, now=behind)
+
+
+@pytest.mark.parametrize("positional", [("self",), ("self", "decision", "x")])
+def test_stdin_beside_positional_words_is_refused(record_tree: Path, positional: tuple[str, ...]) -> None:
+    assert_batch_refused(record_tree, "--stdin takes the events from stdin; give no actor, kind or what", VALID_FIRST_TWO, *positional)
+
+
+@pytest.mark.parametrize("positional", [(), ("self",), ("self", "decision")])
+def test_no_stdin_and_fewer_than_actor_kind_and_what_is_refused(record_tree: Path, positional: tuple[str, ...]) -> None:
+    before = (record_tree / OPEN_EVENTS_FILE).read_bytes()
+    result = run_memento(record_tree, "events", "add", *positional)
+    assert (result.exit_code, result.stdout, result.stderr) == (1, "", "refused: give an actor, a kind and a what, or --stdin\n")
+    assert (record_tree / OPEN_EVENTS_FILE).read_bytes() == before
+
+
+def test_stdin_events_land_in_the_named_span(record_tree: Path) -> None:
+    result = run_memento(record_tree, "events", "open", "--suffix", "side", "a", "side", "span")
+    assert result.exit_code == 0
+    main_before = (record_tree / OPEN_EVENTS_FILE).read_bytes()
+    result = run_memento(record_tree, "events", "add", "--stdin", "--span", "2026-10-01-side", stdin=STDIN_EVENTS)
+    assert result.exit_code == 0
+    assert (record_tree / HISTORY / "2026-10-01/events-side.md").read_text(encoding="utf-8").splitlines()[1:] == STDIN_LINES
+    assert (record_tree / OPEN_EVENTS_FILE).read_bytes() == main_before

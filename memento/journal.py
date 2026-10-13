@@ -1,13 +1,16 @@
 """The journal's verbs: open and add to a span's events, add to and close its narrative, record its failures."""
 
+from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager
+from datetime import datetime
 from pathlib import Path
+from typing import NamedTuple
 
 import typer
 from pydantic import TypeAdapter, ValidationError
 
 from memento import Environment, Refusal, construct, refusals_reported
-from memento.actor import Self_, parse_actor
+from memento.actor import Actor, Self_, parse_actor
 from memento.clock import minute
 from memento.findings import split_entries
 from memento.journal_git import found_head
@@ -15,6 +18,7 @@ from memento.journal_shapes import (
     CHANGE_EVENT,
     CLOSE_HEADER,
     ENTRY_HEADING,
+    EVENT_FIELD_SEPARATOR,
     FAILURE_EVENT,
     HEAD_LABEL,
     LABEL_MARK,
@@ -58,6 +62,11 @@ events_group = typer.Typer(no_args_is_help=True, help="Events: open a span, add 
 failure_group = typer.Typer(no_args_is_help=True, help="Failures: an entry together with its events line.")
 digest_group = typer.Typer(no_args_is_help=True, help="The span's narrative: add a paragraph, close the span, print the newest close block.")
 
+STDIN_FIELD_COUNT = 3
+STDIN_LINE_SHAPE = "is not '<actor> | <kind> | <what>'"
+NO_STDIN_EVENTS = "stdin holds no event line"
+STDIN_BESIDE_WORDS = "--stdin takes the events from stdin; give no actor, kind or what"
+WORDS_OR_STDIN = "give an actor, a kind and a what, or --stdin"
 ROUTED_ELSEWHERE = {
     SPAN_EVENT: f"{SPAN_EVENT} lines are written by 'memento events open' or 'memento digest close'",
     FAILURE_EVENT: f"a {FAILURE_EVENT} is written by 'memento failure add', which writes its entry and its events line together",
@@ -124,28 +133,91 @@ def written_lines(path: str, text: str) -> list[str]:
     return [f"{path}: {line}" for line in text.splitlines() if line.strip()]
 
 
-def record_event(environment: Environment, actor: str, kind: str, what: str, wanted: Span | None) -> tuple[str, str]:
-    """Append one event line to the open span's events file, returning the file's path and the line."""
+class EventRequest(NamedTuple):
+    """One event a caller asks for: its actor and kind parsed, its what still to be validated, and the stdin line it came from, if any."""
+
+    actor: Actor
+    kind: EventKind
+    what: str
+    stdin_line: int | None
+
+
+def refusal_naming_line(refusal: Refusal, stdin_line: int | None) -> Refusal:
+    """The refusal, prefixed with the stdin line it concerns when it concerns one."""
+    return refusal if stdin_line is None else Refusal(f"stdin line {stdin_line}: {refusal}")
+
+
+def event_request(actor: str, kind: str, what: str, stdin_line: int | None) -> EventRequest:
+    """The request a caller's actor, kind and what state, refusing an actor or kind off the schema's, naming the stdin line."""
+    try:
+        return EventRequest(parse_actor(actor), event_kind(kind), what, stdin_line)
+    except Refusal as refusal:
+        raise refusal_naming_line(refusal, stdin_line) from refusal
+
+
+def stdin_event_request(stdin_line: int, text: str) -> EventRequest:
+    """The request one stdin line '<actor> | <kind> | <what>' states, its what keeping any further ' | '."""
+    fields = text.split(EVENT_FIELD_SEPARATOR, STDIN_FIELD_COUNT - 1)
+    if len(fields) != STDIN_FIELD_COUNT:
+        raise Refusal(f"stdin line {stdin_line} {STDIN_LINE_SHAPE}")
+    return event_request(*fields, stdin_line)
+
+
+def stdin_event_requests(text: str) -> list[EventRequest]:
+    """One request per line of a stdin text, refused whole on its first line off the shape."""
+    requests = [stdin_event_request(number, line) for number, line in enumerate(text.splitlines(), 1)]
+    if not requests:
+        raise Refusal(NO_STDIN_EVENTS)
+    return requests
+
+
+def requested_events(actor: str | None, kind: str | None, what: list[str] | None, stdin: bool, read_stdin: Callable[[], str]) -> list[EventRequest]:
+    """The events a verb call asks for: the one its words state, or those of every stdin line, refusing both or neither."""
+    words_given = actor is not None or kind is not None or bool(what)
+    if stdin and words_given:
+        raise Refusal(STDIN_BESIDE_WORDS)
+    if stdin:
+        return stdin_event_requests(read_stdin())
+    if actor is None or kind is None or not what:
+        raise Refusal(WORDS_OR_STDIN)
+    return [event_request(actor, kind, " ".join(what), None)]
+
+
+def event_lines(at: datetime, requests: Sequence[EventRequest]) -> list[EventLine]:
+    """One events line per request, all stamped at one time, refused whole on the first line whose what is invalid."""
+    lines = []
+    for request in requests:
+        try:
+            lines.append(construct(EventLine, at=at, actor=request.actor, kind=request.kind, what=request.what))
+        except Refusal as refusal:
+            raise refusal_naming_line(refusal, request.stdin_line) from refusal
+    return lines
+
+
+def record_events(environment: Environment, requests: Sequence[EventRequest], wanted: Span | None) -> tuple[str, list[str]]:
+    """Append one line per request to the open span's events file in one act, returning the file's path and the lines."""
     root = environment.store.root
     schema = agreeing_schema(root)
-    author, event = parse_actor(actor), event_kind(kind)
     span = open_span_events(root, schema, wanted).span
     with span_transaction(environment.store, schema, span) as act:
-        line = construct(EventLine, at=environment.now(), actor=author, kind=event, what=what)
+        lines = event_lines(environment.now(), requests)
         found = open_span_events(root, schema, span)
-        refuse_clock_behind(minute(line.at), found.text)
-        act.append(found.events_file, line.render() + NEWLINE)
-    return found.events_file, line.render()
+        refuse_clock_behind(minute(lines[0].at), found.text)
+        act.append(found.events_file, "".join(line.render() + NEWLINE for line in lines))
+    return found.events_file, [line.render() for line in lines]
 
 
 @events_group.command(
     "add",
     help=(
         "Append one line '<minute> | <actor> | <kind> | <what>' to a span's events file "
-        "(the events home, <span date>/events.md or <span date>/events-<suffix>.md), stamped by the clock. Reads .claude/memento.yaml "
-        "and the events files; prints '<events file>: <line>'. Refuses: a kind other than decision, discovery, commitment, "
-        "delegation, receipt or attenuation; an actor other than owner, self, agent:<name> or tool:<name>; "
-        "a what that is not one line; a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; "
+        "(the events home, <span date>/events.md or <span date>/events-<suffix>.md), stamped by the clock. With --stdin, append one such "
+        "line per stdin line '<actor> | <kind> | <what>' (a what may hold further ' | '), all in one act and all stamped alike. "
+        "Reads .claude/memento.yaml and the events files; prints '<events file>: <line>' per line written. Refuses: a kind other than "
+        "decision, discovery, commitment, delegation, receipt or attenuation; an actor other than owner, self, agent:<name> or tool:<name>; "
+        "a what that is not one line; --stdin beside an actor, kind or what, or neither of them; a stdin with no line, or a stdin line "
+        "off '<actor> | <kind> | <what>' or holding an invalid part, which refuses the whole batch naming its line number; "
+        "a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; "
         "no open span; several open spans and neither --span nor MEMENTO_SPAN; a clock behind the events file's last line; "
         "the main span in a linked worktree (a suffixed span writes there); "
         "an events file whose working copy edits a line HEAD holds; a schema whose structure memento does not know."
@@ -153,15 +225,17 @@ def record_event(environment: Environment, actor: str, kind: str, what: str, wan
 )
 def add(
     ctx: typer.Context,
-    actor: str = typer.Argument(..., help="owner, self, agent:<name> or tool:<name>."),
-    kind: str = typer.Argument(..., help="decision, discovery, commitment, delegation, receipt or attenuation."),
-    what: list[str] = typer.Argument(..., help="What happened; several words are joined by single spaces."),
+    actor: str | None = typer.Argument(None, help="owner, self, agent:<name> or tool:<name>. Omitted with --stdin."),
+    kind: str | None = typer.Argument(None, help="decision, discovery, commitment, delegation, receipt or attenuation. Omitted with --stdin."),
+    what: list[str] | None = typer.Argument(None, help="What happened; several words are joined by single spaces. Omitted with --stdin."),
+    stdin: bool = typer.Option(False, "--stdin", help="Read one event per stdin line, '<actor> | <kind> | <what>', and append them all in one act."),
     span: str | None = span_option(),
 ) -> None:
-    """Append one event line to a span's events file."""
+    """Append one event line, or one per stdin line, to a span's events file."""
     with refusals_reported():
-        events_file, line = record_event(ctx.obj, actor, kind, " ".join(what), named_span(span))
-    typer.echo(f"{events_file}: {line}")
+        requests = requested_events(actor, kind, what, stdin, typer.get_text_stream("stdin").read)
+        events_file, lines = record_events(ctx.obj, requests, named_span(span))
+    typer.echo(NEWLINE.join(f"{events_file}: {line}" for line in lines))
 
 
 def refuse_open_span(span: Span, events_text: str) -> None:
