@@ -11,15 +11,15 @@ import yaml
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from pydantic.fields import FieldInfo
 
-from memento import Environment, Refusal, construct, refusals_reported
+from memento import Environment, Refusal, construct, known_name, refusals_reported
 from memento.candidate import refuse_new_failures
 from memento.findings import DATE, SHA, Corpus, Finding, fail
 from memento.pointers import ground_findings, home_of
 from memento.project import config_space, journal_space, project_of, spec_archive_path, spec_path
 from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, Schema, home_pattern, load_corpus
 
-directive_group = typer.Typer(no_args_is_help=True, help="Directives: add, replace or drop a rule.")
-results_group = typer.Typer(no_args_is_help=True, help="Results: add, replace or drop a contender's row.")
+directive_group = typer.Typer(no_args_is_help=True, help="Directives: add a rule, replace one, set one of its labels or drop one.")
+results_group = typer.Typer(no_args_is_help=True, help="Results: add a contender's row, replace one, set one of its columns or drop one.")
 fact_group = typer.Typer(no_args_is_help=True, help="Capabilities: replace one exact passage.")
 string_recipes_group = typer.Typer(no_args_is_help=True, help="String-comparison recipes: replace one exact passage.")
 spec_group = typer.Typer(no_args_is_help=True, help="Specifications: add one, replace one exact passage, archive one.")
@@ -382,6 +382,11 @@ class ResultRow(BaseModel):
 RESULT_COLUMNS = ResultRow.columns()
 
 
+def table_cells(line: str) -> list[str]:
+    """The cells of one results table line, each stripped."""
+    return [cell.strip() for cell in line.strip("|").split("|")]
+
+
 def check_results_table(corpus: Corpus) -> Iterator[Finding]:
     """Fail a results table whose columns, cell counts, row contents or repeated keys break the schema's results shape."""
     spec = corpus.schema["kinds"]["results"]
@@ -395,12 +400,12 @@ def check_results_table(corpus: Corpus) -> Iterator[Finding]:
     if not rows:
         yield fail(path, "holds no table")
         return
-    header = [cell.strip() for cell in rows[0][1].strip("|").split("|")]
+    header = table_cells(rows[0][1])
     if header != list(RESULT_COLUMNS):
         yield fail(f"{path}:{rows[0][0]}", f"columns {header} are not the schema's {list(RESULT_COLUMNS)}")
     keys: dict[tuple[str, str], int] = {}
     for number, line in rows[2:]:
-        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        cells = table_cells(line)
         if len(cells) != len(RESULT_COLUMNS):
             yield fail(f"{path}:{number}", f"{len(cells)} cells for {len(RESULT_COLUMNS)} columns")
             continue
@@ -459,13 +464,18 @@ def replace_once_text(corpus: Corpus, path: str, old: str, new: str) -> str:
     return text.replace(old, new)
 
 
+def land_text(environment: Environment, path: str, new_text: str) -> None:
+    """Land a record's whole new text, refusing a candidate FAIL."""
+    refuse_new_failures(environment, {path: new_text})
+    with environment.store.transaction() as act:
+        act.replace(path, new_text)
+
+
 def replace_in_place(environment: Environment, path: str, old: str, new: str) -> None:
     """Replace one exact occurrence of old with new in path, refusing a candidate FAIL, and land it."""
     corpus = load_corpus(environment.store.root)
     new_text = replace_once_text(corpus, path, old, new)
-    refuse_new_failures(environment, {path: new_text})
-    with environment.store.transaction() as act:
-        act.replace(path, new_text)
+    land_text(environment, path, new_text)
 
 
 HEADING_LINE = re.compile(r"(?m)^## (?P<title>.+)$")
@@ -545,9 +555,35 @@ def directive_add(environment: Environment, rule_path: str) -> tuple[str, str]:
     rule_id, heading, rule = directive_input(rule_path)
     corpus, path, width = directive_corpus(environment)
     new_text = insert_block(corpus.text(path), heading, path, f"### {rule_id}\n{rule.render(width)}")
-    refuse_new_failures(environment, {path: new_text})
-    with environment.store.transaction() as act:
-        act.replace(path, new_text)
+    land_text(environment, path, new_text)
+    return path, rule_id
+
+
+def block_replaced(text: str, start: int, end: int, new_block: str) -> str:
+    """The text with the block spanning start to end replaced by new_block, the whitespace after it as the text holds it."""
+    return text[:start] + new_block.rstrip("\n") + closing(text, end) + text[end:]
+
+
+def directive_body(text: str, rule_id: str, width: int, path: str) -> dict[str, str]:
+    """The labelled values of the rule block with this id, refused when its lines do not parse."""
+    _headings, blocks = directive_blocks(text)
+    rule_lines = next((lines for _number, found, lines in blocks if found == rule_id), None)
+    if rule_lines is None:
+        raise Refusal(f"rule '{rule_id}' is not in {path}")
+    body, problems = labelled_lines(rule_lines, width)
+    if body is None:
+        raise Refusal(f"rule '{rule_id}' does not parse: {problems[0][1]}; 'memento directive replace' writes it whole")
+    return {label: value for label, (_line, value) in body.items()}
+
+
+def directive_set(environment: Environment, rule_id: str, label: str, value: str) -> tuple[str, str]:
+    """Set one label of the rule with this id, the whole new rule built as replace builds it and kept under its heading, refusing a candidate FAIL."""
+    known_name("directive", "label", label, DIRECTIVE_LABELS)
+    corpus, path, width = directive_corpus(environment)
+    text = corpus.text(path)
+    start, end = block_span(text, rule_id, path)
+    rule = construct(DirectiveRule, **{**directive_body(text, rule_id, width, path), label: value})
+    land_text(environment, path, block_replaced(text, start, end, f"### {rule_id}\n{rule.render(width)}"))
     return path, rule_id
 
 
@@ -559,13 +595,11 @@ def directive_replace(environment: Environment, rule_path: str) -> tuple[str, st
     start, end = block_span(text, rule_id, path)
     new_block = f"### {rule_id}\n{rule.render(width)}"
     if heading_of_block(text, start, path).strip().lower() == heading.strip().lower():
-        new_text = text[:start] + new_block.rstrip("\n") + closing(text, end) + text[end:]
+        new_text = block_replaced(text, start, end, new_block)
     else:
         without_old = text[:start] + text[end:]
         new_text = insert_block(without_old, heading, path, new_block)
-    refuse_new_failures(environment, {path: new_text})
-    with environment.store.transaction() as act:
-        act.replace(path, new_text)
+    land_text(environment, path, new_text)
     return path, rule_id
 
 
@@ -575,9 +609,7 @@ def directive_drop(environment: Environment, rule_id: str) -> str:
     text = corpus.text(path)
     start, end = block_span(text, rule_id, path)
     new_text = text[:start] + text[end:]
-    refuse_new_failures(environment, {path: new_text})
-    with environment.store.transaction() as act:
-        act.replace(path, new_text)
+    land_text(environment, path, new_text)
     return path
 
 
@@ -586,7 +618,7 @@ def find_row_line(lines: list[str], key: tuple[str, str], path: str) -> int:
     for index, line in enumerate(lines):
         if index < 2 or not line.startswith("|"):
             continue
-        cells = [cell.strip() for cell in line.strip("|").split("|")]
+        cells = table_cells(line)
         if len(cells) >= 2 and (cells[0], cells[1]) == key:
             return index
     raise Refusal(f"no row in {path} carries key {key}")
@@ -599,14 +631,16 @@ def results_lines(environment: Environment) -> tuple[str, list[str]]:
     return path, corpus.text(path).splitlines()
 
 
+def land_lines(environment: Environment, path: str, lines: list[str]) -> None:
+    """Land a table record whose text is these lines, refusing a candidate FAIL."""
+    land_text(environment, path, "\n".join(lines) + "\n")
+
+
 def results_add(environment: Environment, row_path: str) -> tuple[str, tuple[str, str]]:
     """Add a new row at the end of the table, refusing a candidate FAIL (an existing key included)."""
     row = construct(ResultRow, **load_yaml_mapping(row_path))
     path, lines = results_lines(environment)
-    new_text = "\n".join([*lines, row.render()]) + "\n"
-    refuse_new_failures(environment, {path: new_text})
-    with environment.store.transaction() as act:
-        act.replace(path, new_text)
+    land_lines(environment, path, [*lines, row.render()])
     return path, row.key()
 
 
@@ -615,10 +649,21 @@ def results_replace(environment: Environment, row_path: str) -> tuple[str, tuple
     row = construct(ResultRow, **load_yaml_mapping(row_path))
     path, lines = results_lines(environment)
     lines[find_row_line(lines, row.key(), path)] = row.render()
-    new_text = "\n".join(lines) + "\n"
-    refuse_new_failures(environment, {path: new_text})
-    with environment.store.transaction() as act:
-        act.replace(path, new_text)
+    land_lines(environment, path, lines)
+    return path, row.key()
+
+
+def results_set(environment: Environment, approach: str, world: str, column: str, value: str) -> tuple[str, tuple[str, str]]:
+    """Set one column of the row holding this (approach, world) key, the whole new row built as replace builds it, refusing a candidate FAIL."""
+    known_name("results", "column", column, RESULT_COLUMNS)
+    path, lines = results_lines(environment)
+    index = find_row_line(lines, (approach, world), path)
+    cells = table_cells(lines[index])
+    if len(cells) != len(RESULT_COLUMNS):
+        raise Refusal(f"the row in {path} carrying key {(approach, world)} has {len(cells)} cells for {len(RESULT_COLUMNS)} columns")
+    row = construct(ResultRow, **{**dict(zip(RESULT_COLUMNS, cells)), column: value})
+    lines[index] = row.render()
+    land_lines(environment, path, lines)
     return path, row.key()
 
 
@@ -626,10 +671,7 @@ def results_drop(environment: Environment, approach: str, world: str) -> str:
     """Delete the row holding this (approach, world) key, refusing a candidate FAIL."""
     path, lines = results_lines(environment)
     del lines[find_row_line(lines, (approach, world), path)]
-    new_text = "\n".join(lines) + "\n"
-    refuse_new_failures(environment, {path: new_text})
-    with environment.store.transaction() as act:
-        act.replace(path, new_text)
+    land_lines(environment, path, lines)
     return path
 
 
@@ -704,6 +746,29 @@ def directive_replace_command(ctx: typer.Context, rule: str = typer.Argument(...
 
 
 @directive_group.command(
+    "set",
+    help=(
+        "Set one label of the rule this id names to a value: the whole new rule is built from the rule's own labelled "
+        "values with that label replaced, validated as 'directive replace' validates a rule file, and landed in place "
+        "under its heading. Reads .claude/memento.yaml and the directive record. Prints '<directive home>: <id>'. "
+        "Refuses: a label that is not a rule label (naming the labels); the id does not exist; a rule whose lines "
+        "do not parse; a value that is empty, blank or carries a line break; a ground naming no committed path, SHA, "
+        "record heading or dated owner ruling; any other candidate FAIL; a worktree."
+    ),
+)
+def directive_set_command(
+    ctx: typer.Context,
+    rule_id: str = typer.Argument(..., help="The rule's id."),
+    label: str = typer.Argument(..., help="The label to set: when, do, never, why, ground or except."),
+    value: str = typer.Argument(..., help="The label's new value, one line."),
+) -> None:
+    """Set one label of a directive rule."""
+    with refusals_reported():
+        path, found = directive_set(ctx.obj, rule_id, label, value)
+    typer.echo(f"{path}: {found}")
+
+
+@directive_group.command(
     "drop",
     help=(
         "Delete the rule this id names from the directive record. Prints '<directive home>: <id>'. Refuses: the "
@@ -746,6 +811,31 @@ def results_replace_command(ctx: typer.Context, row: str = typer.Argument(..., h
     """Replace a results row from a row.yaml file."""
     with refusals_reported():
         path, key = results_replace(ctx.obj, row)
+    typer.echo(f"{path}: {key}")
+
+
+@results_group.command(
+    "set",
+    help=(
+        "Set one column of the row holding this (approach, world) key to a value: the whole new row is built from the "
+        "row's own cells with that column replaced, validated as 'results replace' validates a row file, and landed in "
+        "place. Reads .claude/memento.yaml and the results record. Prints '<results home>: (<approach>, <world>)' of "
+        "the row after the change. Refuses: a column that is not a results column (naming the columns); no row holds "
+        "the key; a row whose cell count differs from the columns; a value that is empty, blank, holds '|' or carries "
+        "a line break; a date that is not a real YYYY-MM-DD; a key the change would repeat or any other candidate "
+        "FAIL; a worktree."
+    ),
+)
+def results_set_command(
+    ctx: typer.Context,
+    approach: str = typer.Argument(..., help="The row's approach cell."),
+    world: str = typer.Argument(..., help="The row's world cell."),
+    column: str = typer.Argument(..., help="The column to set: a results column, such as verdict or date."),
+    value: str = typer.Argument(..., help="The cell's new value, one line."),
+) -> None:
+    """Set one column of a results row."""
+    with refusals_reported():
+        path, key = results_set(ctx.obj, approach, world, column, value)
     typer.echo(f"{path}: {key}")
 
 

@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from memento.living import DIRECTIVE_LABELS, DIRECTIVE_REQUIRED_LABELS, DIRECTIVE_WIDTH, RESULT_COLUMNS
-from tests.conftest import FIXED_NOW, FIXTURES, commit_all, git, replace_once, run_memento
+from tests.conftest import FIXED_NOW, FIXTURES, build_record_tree, commit_all, git, replace_once, run_memento
 
 RULE_YAML = "rule.yaml"
 ABSENT = object()
@@ -718,3 +718,192 @@ def test_check_map_refuses_a_path_that_only_starts_with_a_home(record_tree: Path
     result = run_memento(record_tree, "check")
     assert result.exit_code == 1
     assert "docs/capabilities.md.bak  not a record the map lists, a declared product, or a retired path" in result.stdout
+
+
+RESULTS_FILE = "docs/results.md"
+CONVENTIONS_FILE = "docs/conventions.md"
+COLUMNS_NAMED = "approach, world, labels, folds, R@P95/fold, P@R10/fold, P@R30/fold, P@R50/fold, bar, run, verdict, date"
+LABELS_NAMED = "when, do, never, why, ground, except"
+CONTENDER_ROW = "| contender | contender | contender | contender | contender | contender | contender | contender | contender | contender | contender | 2026-10-01 |"
+
+
+def sample_conventions(root: Path) -> str:
+    """Commit the sample conventions file, three headings and five rules, into the tree and return its text."""
+    text = (FIXTURES / "conventions.md").read_text(encoding="utf-8")
+    (root / CONVENTIONS_FILE).write_text(text, encoding="utf-8")
+    git(root, "add", CONVENTIONS_FILE)
+    git(root, "commit", "-q", "-m", "fixture sample conventions")
+    return text
+
+
+@pytest.mark.parametrize(
+    ("column", "value"),
+    [("labels", "verified"), ("R@P95/fold", "0.21"), ("verdict", "leads"), ("date", "2026-10-09"), ("approach", "square adapter")],
+)
+def test_results_set_changes_one_column_of_the_row_in_place(record_tree: Path, column: str, value: str) -> None:
+    before = (record_tree / RESULTS_FILE).read_text(encoding="utf-8").splitlines()
+    result = run_memento(record_tree, "results", "set", "contender", "contender", column, value)
+    cells = ["contender"] * 11 + ["2026-10-01"]
+    cells[list(RESULT_COLUMNS).index(column)] = value
+    key = (cells[0], cells[1])
+    assert (result.exit_code, result.stdout) == (0, f"{RESULTS_FILE}: {key}\n")
+    after = (record_tree / RESULTS_FILE).read_text(encoding="utf-8").splitlines()
+    assert after[:-1] == before[:-1]
+    assert after[-1] == "| " + " | ".join(cells) + " |"
+    assert run_memento(record_tree, "check").exit_code == 0
+
+
+@pytest.mark.parametrize(("column", "value"), [("verdict", "leads"), ("date", "2026-10-09"), ("labels", "verified")])
+def test_results_set_writes_the_bytes_results_replace_writes_for_the_whole_row(record_tree: Path, tmp_path: Path, column: str, value: str) -> None:
+    other = build_record_tree(tmp_path / "other")
+    cells = ["contender"] * 11 + ["2026-10-01"]
+    cells[list(RESULT_COLUMNS).index(column)] = value
+    row = write_yaml(other, ROW_YAML, dict(zip(RESULT_COLUMNS, cells, strict=True)))
+    assert run_memento(other, "results", "replace", row).exit_code == 0
+    assert run_memento(record_tree, "results", "set", "contender", "contender", column, value).exit_code == 0
+    assert (record_tree / RESULTS_FILE).read_bytes() == (other / RESULTS_FILE).read_bytes()
+
+
+def test_setting_every_column_of_every_sample_row_to_its_own_value_leaves_the_file_byte_equal(record_tree: Path) -> None:
+    real_text = (FIXTURES / "results.md").read_text(encoding="utf-8")
+    (record_tree / RESULTS_FILE).write_text(real_text, encoding="utf-8")
+    git(record_tree, "add", RESULTS_FILE)
+    git(record_tree, "commit", "-q", "-m", "fixture sample results")
+    for line in [line for line in real_text.splitlines() if line.startswith("|")][2:]:
+        cells = dict(zip(RESULT_COLUMNS, [cell.strip() for cell in line.strip("|").split("|")], strict=True))
+        for column, value in cells.items():
+            result = run_memento(record_tree, "results", "set", cells["approach"], cells["world"], column, value)
+            assert result.exit_code == 0, result.stderr
+    assert (record_tree / RESULTS_FILE).read_text(encoding="utf-8") == real_text
+
+
+def test_results_set_refuses_a_column_the_table_lacks_naming_the_columns(record_tree: Path) -> None:
+    assert_refused(record_tree, f"'colour' is not a results column; the columns are: {COLUMNS_NAMED}", "results", "set", "contender", "contender", "colour", "x")
+
+
+def test_results_set_refuses_a_key_no_row_holds(record_tree: Path) -> None:
+    assert_refused(record_tree, "no row in docs/results.md carries key ('nope', 'nowhere')", "results", "set", "nope", "nowhere", "verdict", "x")
+
+
+@pytest.mark.parametrize(
+    ("column", "value", "message"),
+    [
+        ("verdict", "", "column 'verdict' is empty"),
+        ("verdict", "   ", "column 'verdict' is empty"),
+        ("verdict", "two\nlines", "column 'verdict' carries a line break"),
+        ("verdict", "bad | cell", "column 'verdict' holds '|', which breaks a table row"),
+        ("date", "2026-10-32", "date cell '2026-10-32' is not a real date"),
+        ("date", "yesterday", "date cell 'yesterday' is not YYYY-MM-DD"),
+    ],
+)
+def test_results_set_refuses_a_value_its_column_refuses(record_tree: Path, column: str, value: str, message: str) -> None:
+    assert_refused(record_tree, message, "results", "set", "contender", "contender", column, value)
+
+
+def test_results_set_refuses_a_key_the_change_would_repeat(record_tree: Path) -> None:
+    row = write_yaml(record_tree, ROW_YAML, row_data(approach="contender", world="store.de × other.de"))
+    assert run_memento(record_tree, "results", "add", row).exit_code == 0
+    before = (record_tree / RESULTS_FILE).read_bytes()
+    result = run_memento(record_tree, "results", "set", "contender", "store.de × other.de", "world", "contender")
+    assert result.exit_code == 1
+    assert "refused: the change adds 1 FAIL" in result.stderr
+    assert "already appears" in result.stderr
+    assert (record_tree / RESULTS_FILE).read_bytes() == before
+
+
+def test_results_set_refuses_a_row_whose_cells_do_not_match_the_columns(record_tree: Path) -> None:
+    replace_once(record_tree, RESULTS_FILE, CONTENDER_ROW, "| contender | contender | 2026-10-01 |")
+    assert_refused(record_tree, "the row in docs/results.md carrying key ('contender', 'contender') has 3 cells for 12 columns", "results", "set", "contender", "contender", "verdict", "x")
+
+
+@pytest.mark.parametrize(
+    ("label", "value", "expected_block"),
+    [
+        ("why", "a reason", "when    quoting a number\ndo      measure it first\nwhy     a reason\nground  owner ruling 2026-08-04"),
+        ("do", "measure it twice", "when    quoting a number\ndo      measure it twice\nground  owner ruling 2026-08-04"),
+        ("except", "a rehearsal", "when    quoting a number\ndo      measure it first\nground  owner ruling 2026-08-04\nexcept  a rehearsal"),
+    ],
+)
+def test_directive_set_changes_one_label_of_the_rule_in_place_and_in_schema_order(record_tree: Path, label: str, value: str, expected_block: str) -> None:
+    before = (record_tree / CONVENTIONS_FILE).read_text(encoding="utf-8")
+    result = run_memento(record_tree, "directive", "set", "measure-first", label, value)
+    assert (result.exit_code, result.stdout) == (0, f"{CONVENTIONS_FILE}: measure-first\n")
+    after = (record_tree / CONVENTIONS_FILE).read_text(encoding="utf-8")
+    old_block = "when    quoting a number\ndo      measure it first\nground  owner ruling 2026-08-04"
+    assert after == before.replace(old_block, expected_block)
+    assert run_memento(record_tree, "check").exit_code == 0
+
+
+def test_directive_set_writes_the_bytes_directive_replace_writes_for_the_whole_rule(record_tree: Path, tmp_path: Path) -> None:
+    sample_conventions(record_tree)
+    other = build_record_tree(tmp_path / "other")
+    sample_conventions(other)
+    rule = write_yaml(
+        other,
+        RULE_YAML,
+        {
+            "id": "explicit-seeds",
+            "heading": "pipeline code",
+            "when": "drawing at random",
+            "do": "take the seed from config",
+            "never": "a module-level seed",
+            "why": "a run must reproduce, whatever the machine",
+            "ground": "capabilities § Scoring",
+            "except": "a test that seeds by loop index",
+        },
+    )
+    assert run_memento(other, "directive", "replace", rule).exit_code == 0
+    result = run_memento(record_tree, "directive", "set", "explicit-seeds", "why", "a run must reproduce, whatever the machine")
+    assert result.exit_code == 0
+    assert (record_tree / CONVENTIONS_FILE).read_bytes() == (other / CONVENTIONS_FILE).read_bytes()
+
+
+def test_setting_every_label_of_every_sample_rule_to_its_own_value_leaves_the_file_byte_equal(record_tree: Path) -> None:
+    from memento.living import directive_blocks, labelled_lines
+
+    real_text = sample_conventions(record_tree)
+    _headings, blocks = directive_blocks(real_text)
+    for _number, rule_id, rule_lines in blocks:
+        body, problems = labelled_lines(rule_lines, DIRECTIVE_WIDTH)
+        assert (body is None, problems) == (False, [])
+        for label, (_line, value) in body.items():
+            result = run_memento(record_tree, "directive", "set", rule_id, label, value)
+            assert result.exit_code == 0, result.stderr
+    assert (record_tree / CONVENTIONS_FILE).read_text(encoding="utf-8") == real_text
+
+
+def test_directive_set_refuses_a_label_the_rule_model_lacks_naming_the_labels(record_tree: Path) -> None:
+    assert_refused(record_tree, f"'colour' is not a directive label; the labels are: {LABELS_NAMED}", "directive", "set", "measure-first", "colour", "x")
+
+
+def test_directive_set_refuses_an_absent_id(record_tree: Path) -> None:
+    assert_refused(record_tree, "rule 'no-such-rule' is not in docs/conventions.md", "directive", "set", "no-such-rule", "do", "x")
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [("", "label 'do' is empty"), ("   ", "label 'do' is empty"), ("first\nsecond", "label 'do' carries a line break")],
+)
+def test_directive_set_refuses_a_value_the_label_refuses(record_tree: Path, value: str, message: str) -> None:
+    assert_refused(record_tree, message, "directive", "set", "measure-first", "do", value)
+
+
+def test_directive_set_refuses_a_ground_that_would_add_a_records_failure(record_tree: Path) -> None:
+    before = (record_tree / CONVENTIONS_FILE).read_bytes()
+    result = run_memento(record_tree, "directive", "set", "measure-first", "ground", "a hunch")
+    assert (result.exit_code, result.stdout) == (1, "")
+    assert "refused: the change adds 1 FAIL" in result.stderr
+    assert (record_tree / CONVENTIONS_FILE).read_bytes() == before
+
+
+def test_directive_set_refuses_a_rule_whose_block_does_not_parse(record_tree: Path) -> None:
+    replace_once(record_tree, CONVENTIONS_FILE, "do      measure it first\n", "do measure it first\n")
+    assert_refused(
+        record_tree,
+        "rule 'measure-first' does not parse: not a 'when/do/never/why/ground/except' line padded to 8; 'memento directive replace' writes it whole",
+        "directive",
+        "set",
+        "measure-first",
+        "why",
+        "x",
+    )

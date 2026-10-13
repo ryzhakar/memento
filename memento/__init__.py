@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
@@ -50,3 +50,10 @@ def construct[Model: BaseModel](model: type[Model], **fields: object) -> Model:
     except ValidationError as invalid:
         first = invalid.errors()[0]
         raise Refusal(str(first.get("ctx", {}).get("error", first["msg"]))) from invalid
+
+
+def known_name(owner: str, noun: str, name: str, known: Sequence[str]) -> str:
+    """The name, refused when the record's model does not have it, the refusal naming the ones it has."""
+    if name not in known:
+        raise Refusal(f"'{name}' is not a {owner} {noun}; the {noun}s are: {', '.join(known)}")
+    return name

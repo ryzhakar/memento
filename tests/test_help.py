@@ -1,12 +1,14 @@
 """A group's help names the verbs it has and no verb it lacks."""
 
 import re
+from pathlib import Path
 
 import click
 import pytest
 import typer.main
 
 from memento.__main__ import app
+from tests.conftest import run_memento
 
 UNBUILT_VERBS = frozenset({"render", "run", "log", "find", "compare", "quote"})
 LIST_MARK = ": "
@@ -42,3 +44,9 @@ def test_the_measurement_group_help_names_add_and_void() -> None:
 def test_the_map_group_has_no_verb_and_its_help_names_none() -> None:
     assert group_verbs()["map"] == frozenset()
     assert verbs_named(group_help("map")) == frozenset()
+
+
+@pytest.mark.parametrize(("group", "phrase"), [("results", "(naming the columns)"), ("directive", "(naming the labels)"), ("change", "(naming the fields)")])
+def test_each_set_verbs_help_names_the_refusal_that_lists_the_known_names(record_tree: Path, group: str, phrase: str) -> None:
+    result = run_memento(record_tree, group, "set", "--help")
+    assert (result.exit_code, phrase in " ".join(result.stdout.split())) == (0, True)

@@ -10,7 +10,7 @@ import typer
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from memento import Environment, Refusal, construct, refusals_reported
+from memento import Environment, Refusal, construct, known_name, refusals_reported
 from memento.candidate import refuse_new_failures
 from memento.findings import DATE, FAIL, Corpus, Finding, fail, split_entries
 from memento.git import git_exit_status
@@ -25,7 +25,7 @@ from memento.project import (
 )
 from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, Schema, agreeing_schema, load_corpus
 
-change_group = typer.Typer(no_args_is_help=True, help="The change log: add an entry, supersede one, repair one that fails the check, age the oldest out.")
+change_group = typer.Typer(no_args_is_help=True, help="The change log: add an entry, supersede one, set one of its fields, repair one that fails the check, age the oldest out.")
 
 ENTRY_HEADER = re.compile(rf"^## (?P<start>{DATE})(?: → (?P<end>{DATE}))? — (?P<title>\S.*)$")
 FIELD_LABEL = re.compile(r"^(?P<label>[A-Z][A-Z →-]*[A-Z]):(?P<pad> *)")
@@ -499,6 +499,50 @@ def fails_within(findings: Iterable[Finding], path: str, first: int, count: int)
     ]
 
 
+def land_entry_replacement(environment: Environment, corpus: Corpus, path: str, prefix: str, raws: Sequence[str], index: int, replacement: str) -> None:
+    """Replace the raw entry at index with a replacement text, refusing a replacement that holds a FAIL of the change-log check and any other candidate FAIL."""
+    new_text = prefix + replaced(raws, index, replacement)
+    first = first_line_of(prefix, raws, index)
+    holding = fails_within(check_change_log(corpus.substituted({path: new_text})), path, first, len(replacement.splitlines()))
+    if holding:
+        raise Refusal(f"the replacement holds a FAIL of the change-log check: {holding[0].message}")
+    with environment.store.transaction() as act:
+        refuse_new_failures(environment, {path: new_text})
+        act.replace(path, new_text)
+
+
+def parsed_entry(raw: str, header_prefix: str, spec: Mapping[str, Any]) -> ChangeEntry:
+    """The entry a raw text holds, refused naming repair when it does not parse."""
+    try:
+        return parse_raw_entry(raw, spec)
+    except EntryShapeError as error:
+        raise Refusal(
+            f"the entry whose header starts with '{header_prefix}' does not parse: {error.message}; "
+            "'memento change repair' replaces an entry that fails the check"
+        ) from error
+
+
+def refuse_blank_value(label: str, value: str) -> None:
+    """Refuse a field value that says nothing."""
+    if not value.strip():
+        raise Refusal(f"{label} is empty")
+
+
+def set_entry_field(environment: Environment, header_prefix: str, field: str, value: str) -> str:
+    """Set one field of the one entry whose header starts with header_prefix, the whole new entry built from its own fields and validated as repair validates a replacement, returning the change log's path."""
+    root, _schema, spec = change_spec(environment)
+    label = known_name("change", "field", field, FIELD_LABELS)
+    refuse_blank_value(label, value)
+    path, width = spec["home"], spec["label_width"]
+    corpus = load_corpus(root)
+    prefix, raws = split_log(corpus.text(path))
+    index = header_index(raws, header_prefix)
+    entry = parsed_entry(raws[index], header_prefix, spec)
+    updated = construct(ChangeEntry, **{**entry.model_dump(), ATTR_FOR_LABEL[label]: value})
+    land_entry_replacement(environment, corpus, path, prefix, raws, index, updated.render(width=width))
+    return path
+
+
 def repair_entry(environment: Environment, header_prefix: str, entry_path: Path) -> str:
     """Replace the one entry whose header starts with header_prefix, when it holds a change-log FAIL and its replacement holds none, returning the change log's path."""
     root, schema, spec = change_spec(environment)
@@ -520,13 +564,7 @@ def repair_entry(environment: Environment, header_prefix: str, entry_path: Path)
     refuse_unmerged_entry(root, schema, data)
     trailing = CANONICAL_FINAL_TRAILING_BLANK_LINES if index == len(raws) - 1 else CANONICAL_TRAILING_BLANK_LINES
     replacement = entry.model_copy(update={"trailing_blank_lines": trailing}).render(width=width)
-    new_text = prefix + replaced(raws, index, replacement)
-    holding = fails_within(check_change_log(corpus.substituted({path: new_text})), path, first, len(replacement.splitlines()))
-    if holding:
-        raise Refusal(f"the replacement holds a FAIL of the change-log check: {holding[0].message}")
-    with environment.store.transaction() as act:
-        refuse_new_failures(environment, {path: new_text})
-        act.replace(path, new_text)
+    land_entry_replacement(environment, corpus, path, prefix, raws, index, replacement)
     return path
 
 
@@ -641,6 +679,31 @@ def age(ctx: typer.Context) -> None:
         archive_path, retired_line = age_out(ctx.obj)
     typer.echo(archive_path)
     typer.echo(retired_line)
+
+
+@change_group.command(
+    "set",
+    help=(
+        "Set one field (KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE or SUPERSEDED-BY) of the one entry whose header line "
+        "starts with <header-prefix> (the text after '## ') to a value: the whole new entry is built from the entry's own "
+        "fields with that field replaced, validated as 'change repair' validates a replacement, and landed in place with "
+        "the blank lines it had; a multi-line value separates its lines by newlines. Reads .claude/memento.yaml and the change log; "
+        "prints the path written. Refuses: a field the schema does not declare (naming the fields); a value that is empty "
+        "or blank; zero or several entries whose header line starts with <header-prefix>; an entry that does not parse "
+        "('change repair' replaces it); a replacement that holds a FAIL of the change-log check, named; a candidate FAIL "
+        "elsewhere; a schema whose change fields differ from memento's; a worktree."
+    ),
+)
+def set_field(
+    ctx: typer.Context,
+    header_prefix: str = typer.Argument(..., help="The start of the entry's header line, the text after '## '."),
+    field: str = typer.Argument(..., help="The field to set: KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE or SUPERSEDED-BY."),
+    value: str = typer.Argument(..., help="The field's new value; lines of a multi-line one are separated by newlines."),
+) -> None:
+    """Set one field of a change-log entry."""
+    with refusals_reported():
+        path = set_entry_field(ctx.obj, header_prefix, field, value)
+    typer.echo(path)
 
 
 @change_group.command(

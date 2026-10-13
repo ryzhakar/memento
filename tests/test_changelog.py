@@ -978,3 +978,129 @@ def test_repair_writes_no_blank_line_after_the_header_of_the_entry_it_replaces(r
     assert result.exit_code == 0
     assert "## 2026-04-09 — Repaired frozen base\nKIND:          computed\n" in log_text(record_tree)
     assert run_memento(record_tree, "check").exit_code == 0
+
+
+SAMPLE_FIELDS_NAMED = "KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE, SUPERSEDED-BY"
+FROZEN_BASE_PREFIX = "2026-04-09 — The frozen base"
+
+
+def assert_set_refused(root: Path, message: str, *args: str) -> None:
+    """Assert `change set` refuses with this message on stderr alone and leaves the change log's bytes untouched."""
+    before = (root / "docs/architecture_log.md").read_bytes()
+    result = run_memento(root, "change", "set", *args)
+    assert (result.exit_code, result.stdout, result.stderr) == (1, "", f"refused: {message}\n")
+    assert (root / "docs/architecture_log.md").read_bytes() == before
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("EVIDENCE", "merge abc1234", "INVALIDATES:   nothing\nEVIDENCE:      merge abc1234\n"),
+        ("SUPERSEDED-BY", "2026-09-30 — replaced outright", "INVALIDATES:   nothing\nSUPERSEDED-BY: 2026-09-30 — replaced outright\n"),
+        ("WHY", "the first was weak, measured", "WHY:           the first was weak, measured\nINVALIDATES:   nothing\n"),
+        ("INVALIDATES", "every number\nthe old base produced", "INVALIDATES:   every number\n               the old base produced\n"),
+        ("FROM → TO", "one base → another base, tuned", "FROM → TO:     one base → another base, tuned\nWHY:"),
+    ],
+)
+def test_change_set_changes_one_field_of_the_entry_in_place_and_in_schema_order(record_tree: Path, field: str, value: str, expected: str) -> None:
+    result = run_memento(record_tree, "change", "set", FROZEN_BASE_PREFIX, field, value)
+    assert (result.exit_code, result.stdout) == (0, "docs/architecture_log.md\n")
+    text = log_text(record_tree)
+    assert expected in text
+    assert text.startswith("# Architecture Log\n\n## 2026-04-09 — The frozen base changes\nKIND:          computed\n")
+    assert run_memento(record_tree, "check").exit_code == 0
+
+
+def test_change_set_leaves_every_other_entry_and_the_seams_between_them_as_they_were(record_tree: Path) -> None:
+    add_second_entry(record_tree)
+    before = log_text(record_tree)
+    result = run_memento(record_tree, "change", "set", FROZEN_BASE_PREFIX, "EVIDENCE", "merge abc1234")
+    assert result.exit_code == 0
+    first_entry, second_entry = before.split("\n\n## ")[1], before.split("\n\n## ")[2]
+    expected = before.replace(first_entry, first_entry + "\nEVIDENCE:      merge abc1234")
+    assert log_text(record_tree) == expected
+    assert second_entry in log_text(record_tree)
+
+
+def test_change_set_keeps_the_blank_line_an_older_entry_carries_after_its_header(record_tree: Path) -> None:
+    give_frozen_base_a_blank_line_after_its_header(record_tree)
+    result = run_memento(record_tree, "change", "set", FROZEN_BASE_PREFIX, "EVIDENCE", "merge abc1234")
+    assert result.exit_code == 0
+    assert FROZEN_BASE_HEADER + "\nKIND:" in log_text(record_tree)
+
+
+def test_setting_every_field_of_every_sample_entry_to_its_own_value_leaves_the_log_byte_equal(record_tree: Path) -> None:
+    real_text = SAMPLE_LOG.read_text(encoding="utf-8")
+    (record_tree / "docs/architecture_log.md").write_text(real_text, encoding="utf-8")
+    _prefix, raws = split_log(real_text)
+    for raw in raws:
+        entry = parse_raw_entry(raw, spec())
+        for label, value in entry.present_fields().items():
+            result = run_memento(record_tree, "change", "set", raw.splitlines()[0].removeprefix("## "), label, value)
+            assert result.exit_code == 0, result.stderr
+    assert log_text(record_tree) == real_text
+
+
+def test_change_set_refuses_a_field_the_schema_lacks_naming_the_fields(record_tree: Path) -> None:
+    assert_set_refused(record_tree, f"'NOTE' is not a change field; the fields are: {SAMPLE_FIELDS_NAMED}", FROZEN_BASE_PREFIX, "NOTE", "x")
+
+
+@pytest.mark.parametrize(
+    ("prefix", "message"),
+    [
+        ("2026-05-01", "no entry whose header starts with '2026-05-01'"),
+        ("2026-", "2 entries whose header starts with '2026-'; name one"),
+    ],
+)
+def test_change_set_refuses_a_header_prefix_that_matches_no_entry_or_several(record_tree: Path, prefix: str, message: str) -> None:
+    add_second_entry(record_tree)
+    assert_set_refused(record_tree, message, prefix, "WHY", "x")
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    [
+        ("KIND", "sideways", "the replacement holds a FAIL of the change-log check: KIND 'sideways' is not one of ['computed', 'runnable']"),
+        ("EVIDENCE", "line one\nline two", "the replacement holds a FAIL of the change-log check: EVIDENCE spans 2 lines; it takes one"),
+        ("WHY", " ".join(["word"] * 400), "the replacement holds a FAIL of the change-log check: "),
+    ],
+)
+def test_change_set_refuses_a_value_that_leaves_the_entry_failing_the_check(record_tree: Path, field: str, value: str, message: str) -> None:
+    before = log_text(record_tree)
+    result = run_memento(record_tree, "change", "set", FROZEN_BASE_PREFIX, field, value)
+    assert (result.exit_code, result.stdout) == (1, "")
+    assert result.stderr.startswith(f"refused: {message}")
+    assert log_text(record_tree) == before
+
+
+@pytest.mark.parametrize("value", ["", "   "])
+def test_change_set_refuses_a_value_that_is_empty_or_blank(record_tree: Path, value: str) -> None:
+    assert_set_refused(record_tree, "WHY is empty", FROZEN_BASE_PREFIX, "WHY", value)
+
+
+def test_change_set_refuses_an_entry_that_does_not_parse_and_names_repair(record_tree: Path) -> None:
+    break_frozen_base_entry(record_tree)
+    assert_set_refused(
+        record_tree,
+        "the entry whose header starts with '2026-04-09 — The frozen base' does not parse: KIND 'sideways' is not one of ['computed', 'runnable']; 'memento change repair' replaces an entry that fails the check",
+        FROZEN_BASE_PREFIX,
+        "WHY",
+        "x",
+    )
+
+
+def test_change_set_lands_beside_a_failure_the_log_already_holds_and_leaves_it(record_tree: Path) -> None:
+    add_second_entry(record_tree)
+    replace_once(record_tree, "docs/architecture_log.md", "## 2026-09-30 — Second", "## 2026-03-01 — Second")
+    result = run_memento(record_tree, "change", "set", FROZEN_BASE_PREFIX, "EVIDENCE", "merge abc1234")
+    assert result.exit_code == 0
+    findings = run_memento(record_tree, "check").stdout
+    assert "dated 2026-03-01 after an entry dated 2026-04-09" in findings
+    assert findings.endswith("records: 1 FAIL, 0 WARN\n")
+
+
+def test_change_set_refuses_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
+    worktree = tmp_path / "worktree"
+    git(record_tree, "worktree", "add", "-q", str(worktree))
+    result = run_memento(worktree, "change", "set", FROZEN_BASE_PREFIX, "WHY", "x")
+    assert (result.exit_code, "records are written in the root checkout only" in result.stderr) == (1, True)
