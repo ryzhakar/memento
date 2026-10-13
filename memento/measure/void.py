@@ -5,7 +5,7 @@ from pathlib import Path
 import typer
 from pydantic import TypeAdapter
 
-from memento import Environment, Refusal, refusals_reported
+from memento import Environment, Refusal, announce, quiet_option, refusals_reported
 from memento.actor import Self_
 from memento.candidate import refuse_new_failures
 from memento.measure.add import resolved
@@ -61,8 +61,9 @@ def void_command(
     target: str = typer.Argument(..., help="m-YYYYMMDD-NNN for a whole entry, or m-YYYYMMDD-NNN#k for its k-th item."),
     reason: str = typer.Option(..., "--reason", help="Why the target does not stand, one line."),
     evidence: str = typer.Option(..., "--evidence", help="path:line of the finding, or the 40-hex sha of the commit holding it."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Append one void of an earlier entry or run to the measurement log."""
     with refusals_reported():
         log_path, void_id = record_void(ctx.obj, target, reason, evidence)
-    typer.echo(f"{log_path}: {void_id}")
+    announce(f"{log_path}: {void_id}", quiet)

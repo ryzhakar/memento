@@ -214,6 +214,24 @@ def run_memento(root: Path, *args: str, now: datetime = FIXED_NOW, checks: tuple
     return CliRunner().invoke(app, list(args), obj=environment, input=stdin)
 
 
+def tree_bytes(root: Path) -> dict[str, bytes]:
+    """Every file of the tree outside git's directory, by path, with its bytes."""
+    return {str(path.relative_to(root)): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file() and ".git" not in path.parts}
+
+
+def landed_state(root: Path) -> tuple[dict[str, bytes], str]:
+    """What a landed write changes: the tree's files outside git's directory, and HEAD."""
+    return tree_bytes(root), git(root, "rev-parse", "HEAD")
+
+
+def assert_quiet_write(root: Path, *args: str, stdin: str | None = None) -> None:
+    """Assert a write verb run with --quiet lands its write and prints nothing on either stream."""
+    before = landed_state(root)
+    result = run_memento(root, *args, "--quiet", stdin=stdin)
+    assert (result.exit_code, result.stdout, result.stderr) == (0, "", "")
+    assert landed_state(root) != before
+
+
 @pytest.fixture
 def record_tree(tmp_path: Path) -> Path:
     """A valid record tree committed in its own repository."""

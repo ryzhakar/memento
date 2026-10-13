@@ -6,7 +6,7 @@ from typing import Annotated
 import typer
 from pydantic import AfterValidator, BaseModel, ConfigDict
 
-from memento import Environment, Refusal, construct, refusals_reported
+from memento import Environment, Refusal, announce, construct, quiet_option, refusals_reported
 from memento.findings import FAIL, normalized, run_checks
 from memento.git import git_exit_status, git_output
 from memento.journal_shapes import visible_single_line
@@ -94,8 +94,9 @@ def commit(
     ctx: typer.Context,
     subject: str = typer.Argument(..., help="The commit subject after the commit type, within the project's word cap."),
     paths: list[str] = typer.Argument(..., help="The record paths to commit, relative to the project root."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Commit the named record paths after a green check."""
     with refusals_reported():
         sha, message, records = commit_records(ctx.obj, subject, paths)
-    typer.echo("\n".join([f"{sha} {message}", *records]))
+    announce("\n".join([f"{sha} {message}", *records]), quiet)

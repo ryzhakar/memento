@@ -11,7 +11,7 @@ import yaml
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, model_validator
 from pydantic.fields import FieldInfo
 
-from memento import Environment, Refusal, construct, known_name, refusals_reported
+from memento import Environment, Refusal, announce, construct, known_name, quiet_option, refusals_reported
 from memento.candidate import refuse_new_failures
 from memento.findings import DATE, SHA, Corpus, Finding, fail
 from memento.pointers import ground_findings, home_of
@@ -723,11 +723,15 @@ def spec_archive(environment: Environment, name: str) -> tuple[str, str]:
         "candidate FAIL."
     ),
 )
-def directive_add_command(ctx: typer.Context, rule: str = typer.Argument(..., help="Path to the rule.yaml file.")) -> None:
+def directive_add_command(
+    ctx: typer.Context,
+    rule: str = typer.Argument(..., help="Path to the rule.yaml file."),
+    quiet: bool = quiet_option(),
+) -> None:
     """Add a new directive rule from a rule.yaml file."""
     with refusals_reported():
         path, rule_id = directive_add(ctx.obj, rule)
-    typer.echo(f"{path}: {rule_id}")
+    announce(f"{path}: {rule_id}", quiet)
 
 
 @directive_group.command(
@@ -738,11 +742,15 @@ def directive_add_command(ctx: typer.Context, rule: str = typer.Argument(..., he
         "add' names."
     ),
 )
-def directive_replace_command(ctx: typer.Context, rule: str = typer.Argument(..., help="Path to the rule.yaml file.")) -> None:
+def directive_replace_command(
+    ctx: typer.Context,
+    rule: str = typer.Argument(..., help="Path to the rule.yaml file."),
+    quiet: bool = quiet_option(),
+) -> None:
     """Replace a directive rule from a rule.yaml file."""
     with refusals_reported():
         path, rule_id = directive_replace(ctx.obj, rule)
-    typer.echo(f"{path}: {rule_id}")
+    announce(f"{path}: {rule_id}", quiet)
 
 
 @directive_group.command(
@@ -761,11 +769,12 @@ def directive_set_command(
     rule_id: str = typer.Argument(..., help="The rule's id."),
     label: str = typer.Argument(..., help="The label to set: when, do, never, why, ground or except."),
     value: str = typer.Argument(..., help="The label's new value, one line."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Set one label of a directive rule."""
     with refusals_reported():
         path, found = directive_set(ctx.obj, rule_id, label, value)
-    typer.echo(f"{path}: {found}")
+    announce(f"{path}: {found}", quiet)
 
 
 @directive_group.command(
@@ -775,11 +784,15 @@ def directive_set_command(
         "id does not exist; the rule is cited as a directive rule in a record or in tracked code."
     ),
 )
-def directive_drop_command(ctx: typer.Context, rule_id: str = typer.Argument(..., help="The rule's id.")) -> None:
+def directive_drop_command(
+    ctx: typer.Context,
+    rule_id: str = typer.Argument(..., help="The rule's id."),
+    quiet: bool = quiet_option(),
+) -> None:
     """Delete a directive rule by its id."""
     with refusals_reported():
         path = directive_drop(ctx.obj, rule_id)
-    typer.echo(f"{path}: {rule_id}")
+    announce(f"{path}: {rule_id}", quiet)
 
 
 @results_group.command(
@@ -793,11 +806,15 @@ def directive_drop_command(ctx: typer.Context, rule_id: str = typer.Argument(...
         "other candidate FAIL."
     ),
 )
-def results_add_command(ctx: typer.Context, row: str = typer.Argument(..., help="Path to the row.yaml file.")) -> None:
+def results_add_command(
+    ctx: typer.Context,
+    row: str = typer.Argument(..., help="Path to the row.yaml file."),
+    quiet: bool = quiet_option(),
+) -> None:
     """Add a new results row from a row.yaml file."""
     with refusals_reported():
         path, key = results_add(ctx.obj, row)
-    typer.echo(f"{path}: {key}")
+    announce(f"{path}: {key}", quiet)
 
 
 @results_group.command(
@@ -807,11 +824,15 @@ def results_add_command(ctx: typer.Context, row: str = typer.Argument(..., help=
         "<world>)'. Refuses: the key does not exist; any refusal 'results add' names."
     ),
 )
-def results_replace_command(ctx: typer.Context, row: str = typer.Argument(..., help="Path to the row.yaml file.")) -> None:
+def results_replace_command(
+    ctx: typer.Context,
+    row: str = typer.Argument(..., help="Path to the row.yaml file."),
+    quiet: bool = quiet_option(),
+) -> None:
     """Replace a results row from a row.yaml file."""
     with refusals_reported():
         path, key = results_replace(ctx.obj, row)
-    typer.echo(f"{path}: {key}")
+    announce(f"{path}: {key}", quiet)
 
 
 @results_group.command(
@@ -832,11 +853,12 @@ def results_set_command(
     world: str = typer.Argument(..., help="The row's world cell."),
     column: str = typer.Argument(..., help="The column to set: a results column, such as verdict or date."),
     value: str = typer.Argument(..., help="The cell's new value, one line."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Set one column of a results row."""
     with refusals_reported():
         path, key = results_set(ctx.obj, approach, world, column, value)
-    typer.echo(f"{path}: {key}")
+    announce(f"{path}: {key}", quiet)
 
 
 @results_group.command(
@@ -847,11 +869,12 @@ def results_drop_command(
     ctx: typer.Context,
     approach: str = typer.Argument(..., help="The row's approach cell."),
     world: str = typer.Argument(..., help="The row's world cell."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Delete a results row by its (approach, world) key."""
     with refusals_reported():
         path = results_drop(ctx.obj, approach, world)
-    typer.echo(f"{path}: ({approach}, {world})")
+    announce(f"{path}: ({approach}, {world})", quiet)
 
 
 @fact_group.command(
@@ -865,12 +888,13 @@ def fact_replace_command(
     ctx: typer.Context,
     old: str = typer.Argument(..., help="The exact passage to replace."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Replace one exact passage of the fact record."""
     with refusals_reported():
         path = home_of(load_corpus(ctx.obj.store.root), "fact")
         replace_in_place(ctx.obj, path, old, new)
-    typer.echo(path)
+    announce(path, quiet)
 
 
 @string_recipes_group.command(
@@ -885,12 +909,13 @@ def string_recipes_replace_command(
     ctx: typer.Context,
     old: str = typer.Argument(..., help="The exact passage to replace."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Replace one exact passage of the string_recipes record."""
     with refusals_reported():
         path = home_of(load_corpus(ctx.obj.store.root), "string_recipes")
         replace_in_place(ctx.obj, path, old, new)
-    typer.echo(path)
+    announce(path, quiet)
 
 
 @spec_group.command(
@@ -904,11 +929,12 @@ def spec_add_command(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="The spec's name."),
     draft: str = typer.Argument(..., help="Path to the draft file whose bytes become the spec."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Add a new spec from a draft file."""
     with refusals_reported():
         path = spec_add(ctx.obj, name, draft)
-    typer.echo(path)
+    announce(path, quiet)
 
 
 @spec_group.command(
@@ -923,6 +949,7 @@ def spec_replace_command(
     name: str = typer.Argument(..., help="The spec's name."),
     old: str = typer.Argument(..., help="The exact passage to replace."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Replace one exact passage of a spec."""
     with refusals_reported():
@@ -931,7 +958,7 @@ def spec_replace_command(
         if not corpus.exists(path):
             raise Refusal(f"'{path}' does not exist")
         replace_in_place(ctx.obj, path, old, new)
-    typer.echo(path)
+    announce(path, quiet)
 
 
 @spec_group.command(
@@ -941,8 +968,12 @@ def spec_replace_command(
         "paths. Refuses: no such spec; the destination already exists."
     ),
 )
-def spec_archive_command(ctx: typer.Context, name: str = typer.Argument(..., help="The spec's name.")) -> None:
+def spec_archive_command(
+    ctx: typer.Context,
+    name: str = typer.Argument(..., help="The spec's name."),
+    quiet: bool = quiet_option(),
+) -> None:
     """Archive a spec whole, dated by today."""
     with refusals_reported():
         path, archive_path = spec_archive(ctx.obj, name)
-    typer.echo(f"{path} -> {archive_path}")
+    announce(f"{path} -> {archive_path}", quiet)

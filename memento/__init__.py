@@ -17,6 +17,7 @@ if TYPE_CHECKING:
     from memento.store import Store
 
 REFUSED_EXIT_CODE = 1
+QUIET_HELP = "Print nothing on success; a refusal still prints on stderr and exits 1."
 
 
 class Refusal(Exception):
@@ -57,3 +58,14 @@ def known_name(owner: str, noun: str, name: str, known: Sequence[str]) -> str:
     if name not in known:
         raise Refusal(f"'{name}' is not a {owner} {noun}; the {noun}s are: {', '.join(known)}")
     return name
+
+
+def quiet_option() -> bool:
+    """The `--quiet` option every write verb takes."""
+    return typer.Option(False, "--quiet", help=QUIET_HELP)
+
+
+def announce(text: str, quiet: bool) -> None:
+    """Print a write verb's result on stdout unless the verb ran quiet."""
+    if not quiet:
+        typer.echo(text)

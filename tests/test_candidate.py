@@ -13,7 +13,7 @@ from memento.findings import Check, Corpus, Finding, warn
 from memento.schema import load_corpus
 from memento.git import git_exit_status
 from memento.store import Store
-from tests.conftest import FIXED_NOW, HISTORY, replace_once
+from tests.conftest import FIXED_NOW, HISTORY, replace_once, tree_bytes
 
 CAPABILITIES = "docs/capabilities.md"
 CLEAN_CAPABILITIES = "# Capabilities\n\n## Scoring\n\nThe scorer slices its input.\n"
@@ -23,11 +23,6 @@ MISSING_POINTER = "The scorer slices its input, as docs/missing.md says.\n"
 def environment_for(root: Path, checks: tuple[Check, ...] = CHECKS) -> Environment:
     """The environment a verb receives for a tree, carrying the given checks."""
     return Environment(store=Store(root=root, replace_file=os.replace), now=lambda: FIXED_NOW, checks=checks, run_git=git_exit_status)
-
-
-def tree_bytes(root: Path) -> dict[str, bytes]:
-    """Every file under the tree outside .git, with its bytes."""
-    return {str(path.relative_to(root)): path.read_bytes() for path in root.rglob("*") if path.is_file() and ".git" not in path.parts}
 
 
 def test_a_change_adding_a_failure_is_refused_naming_it(record_tree: Path) -> None:

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from tests.conftest import FIXED_NOW, HISTORY, SCHEMA_PATH, commit_tree, git, replace_once, run_memento
+from tests.conftest import FIXED_NOW, HISTORY, SCHEMA_PATH, commit_tree, git, replace_once, run_memento, tree_bytes
 from tests.test_journal import FAILURE_PARTS, assert_refused_landing_nothing, check_findings, close_open_span, commit_recipes_at, rewrite_schema
 
 DAY = f"{HISTORY}/2026-10-01"
@@ -41,11 +41,6 @@ def open_side(root: Path, now: datetime = FIXED_NOW) -> None:
 def with_span(command: tuple[str, ...], span: str) -> tuple[str, ...]:
     """A journal command with its `--span` option set after its group and verb."""
     return (*command[:2], "--span", span, *command[2:])
-
-
-def tree_bytes(root: Path) -> dict[str, bytes]:
-    """Every file of the tree outside git's directory, by path, with its bytes."""
-    return {str(path.relative_to(root)): path.read_bytes() for path in sorted(root.rglob("*")) if path.is_file() and ".git" not in path.parts}
 
 
 @pytest.fixture

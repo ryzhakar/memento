@@ -9,7 +9,7 @@ from typing import NamedTuple
 import typer
 from pydantic import TypeAdapter, ValidationError
 
-from memento import Environment, Refusal, construct, refusals_reported
+from memento import Environment, Refusal, announce, construct, quiet_option, refusals_reported
 from memento.actor import Actor, Self_, parse_actor
 from memento.clock import minute
 from memento.findings import split_entries
@@ -160,7 +160,8 @@ def stdin_event_request(stdin_line: int, text: str) -> EventRequest:
     fields = text.split(EVENT_FIELD_SEPARATOR, STDIN_FIELD_COUNT - 1)
     if len(fields) != STDIN_FIELD_COUNT:
         raise Refusal(f"stdin line {stdin_line} {STDIN_LINE_SHAPE}")
-    return event_request(*fields, stdin_line)
+    actor, kind, what = fields
+    return event_request(actor, kind, what, stdin_line)
 
 
 def stdin_event_requests(text: str) -> list[EventRequest]:
@@ -230,12 +231,13 @@ def add(
     what: list[str] | None = typer.Argument(None, help="What happened; several words are joined by single spaces. Omitted with --stdin."),
     stdin: bool = typer.Option(False, "--stdin", help="Read one event per stdin line, '<actor> | <kind> | <what>', and append them all in one act."),
     span: str | None = span_option(),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Append one event line, or one per stdin line, to a span's events file."""
     with refusals_reported():
         requests = requested_events(actor, kind, what, stdin, typer.get_text_stream("stdin").read)
         events_file, lines = record_events(ctx.obj, requests, named_span(span))
-    typer.echo(NEWLINE.join(f"{events_file}: {line}" for line in lines))
+    announce(NEWLINE.join(f"{events_file}: {line}" for line in lines), quiet)
 
 
 def refuse_open_span(span: Span, events_text: str) -> None:
@@ -277,11 +279,12 @@ def open_(
     ctx: typer.Context,
     what: list[str] = typer.Argument(..., help="What the span opens on; several words are joined by single spaces."),
     suffix: str | None = typer.Option(None, "--suffix", help="Open a parallel span named by this suffix, beside the main one."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Open a span in today's events file."""
     with refusals_reported():
         events_file, line = open_span(ctx.obj, " ".join(what), suffix)
-    typer.echo(f"{events_file}: {line}")
+    announce(f"{events_file}: {line}", quiet)
 
 
 @events_group.command(
@@ -349,11 +352,12 @@ def add_paragraph(
     ctx: typer.Context,
     paragraphs: list[str] = typer.Argument(..., help="One paragraph per argument, each one line."),
     span: str | None = span_option(),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Append paragraphs to a span's session record."""
     with refusals_reported():
         session, added = add_paragraphs(ctx.obj, paragraphs, named_span(span))
-    typer.echo(NEWLINE.join(written_lines(session, added)))
+    announce(NEWLINE.join(written_lines(session, added)), quiet)
 
 
 def refuse_multiline_next(next_step: str) -> None:
@@ -412,11 +416,12 @@ def close(
     open: str = typer.Argument(..., help="Waits, tripwires and delegations left open, or 'none'."),
     next: str = typer.Argument(..., help="The first step of the next span, one line."),
     span: str | None = span_option(),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Close a span with its close block and close line."""
     with refusals_reported():
         written = close_span(ctx.obj, state, open, next, named_span(span))
-    typer.echo(NEWLINE.join(line for path, text in written for line in written_lines(path, text)))
+    announce(NEWLINE.join(line for path, text in written for line in written_lines(path, text)), quiet)
 
 
 @digest_group.command(
@@ -495,8 +500,9 @@ def add_failure_entry(
     mechanism: str = typer.Argument(..., help="The mechanism behind it, one line."),
     correction: str = typer.Argument(..., help="The correction, one line."),
     span: str | None = span_option(),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Append a failure entry and its events line."""
     with refusals_reported():
         written = add_failure(ctx.obj, title, what_happened, mechanism, correction, named_span(span))
-    typer.echo(NEWLINE.join(line for path, text in written for line in written_lines(path, text)))
+    announce(NEWLINE.join(line for path, text in written for line in written_lines(path, text)), quiet)

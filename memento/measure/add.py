@@ -14,7 +14,7 @@ from typing import Annotated, Any
 import typer
 from pydantic import BaseModel, Field, Tag, TypeAdapter
 
-from memento import Environment, Refusal, refusals_reported
+from memento import Environment, Refusal, announce, quiet_option, refusals_reported
 from memento.actor import Self_
 from memento.candidate import refuse_new_failures
 from memento.measure.check import MEASUREMENT_KIND, document_problems, logged_documents
@@ -475,8 +475,9 @@ def prefixed_item_record(root: Path, position: int, item: RunRecordPath | Inline
 def add_command(
     ctx: typer.Context,
     entry_spec: str = typer.Argument(..., help="Block-form YAML entry spec, a scratch file outside the committed records."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Append one entry built from an entry spec to the measurement log."""
     with refusals_reported():
         log_path, entry_id = record_measurement(ctx.obj, entry_spec)
-    typer.echo(f"{log_path}: {entry_id}")
+    announce(f"{log_path}: {entry_id}", quiet)

@@ -10,7 +10,7 @@ import typer
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from memento import Environment, Refusal, construct, known_name, refusals_reported
+from memento import Environment, Refusal, announce, construct, known_name, quiet_option, refusals_reported
 from memento.candidate import refuse_new_failures
 from memento.findings import DATE, FAIL, Corpus, Finding, fail, split_entries
 from memento.git import git_exit_status
@@ -632,11 +632,12 @@ def check_change_log_pointers(corpus: Corpus) -> Iterator[Finding]:
 def add(
     ctx: typer.Context,
     entry_path: Path = typer.Argument(..., help="A block-form YAML file with the entry's start, end, title, kind, from_to, why, invalidates, evidence and merged fields."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Append one new entry to the change log."""
     with refusals_reported():
         path = append_entry(ctx.obj, entry_path)
-    typer.echo(path)
+    announce(path, quiet)
 
 
 @change_group.command(
@@ -654,11 +655,12 @@ def supersede(
     date_text: str = typer.Argument(..., help="The matching entry's start date, YYYY-MM-DD."),
     title_prefix: str = typer.Argument(..., help="A prefix of the matching entry's title."),
     by: str = typer.Argument(..., help="The SUPERSEDED-BY text to add or append."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Add or extend one entry's SUPERSEDED-BY field."""
     with refusals_reported():
         path = supersede_entry(ctx.obj, date_text, title_prefix, by)
-    typer.echo(path)
+    announce(path, quiet)
 
 
 @change_group.command(
@@ -673,12 +675,11 @@ def supersede(
         "FAIL; a worktree."
     ),
 )
-def age(ctx: typer.Context) -> None:
+def age(ctx: typer.Context, quiet: bool = quiet_option()) -> None:
     """Move the oldest whole entries out of the change log until it is under budget."""
     with refusals_reported():
         archive_path, retired_line = age_out(ctx.obj)
-    typer.echo(archive_path)
-    typer.echo(retired_line)
+    announce(f"{archive_path}\n{retired_line}", quiet)
 
 
 @change_group.command(
@@ -699,11 +700,12 @@ def set_field(
     header_prefix: str = typer.Argument(..., help="The start of the entry's header line, the text after '## '."),
     field: str = typer.Argument(..., help="The field to set: KIND, FROM → TO, WHY, INVALIDATES, EVIDENCE or SUPERSEDED-BY."),
     value: str = typer.Argument(..., help="The field's new value; lines of a multi-line one are separated by newlines."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Set one field of a change-log entry."""
     with refusals_reported():
         path = set_entry_field(ctx.obj, header_prefix, field, value)
-    typer.echo(path)
+    announce(path, quiet)
 
 
 @change_group.command(
@@ -722,8 +724,9 @@ def repair(
     ctx: typer.Context,
     header_prefix: str = typer.Argument(..., help="The start of the entry's header line, the text after '## '."),
     entry_path: Path = typer.Argument(..., help="A block-form YAML file with the replacement's start, end, title, kind, from_to, why, invalidates, evidence and merged fields."),
+    quiet: bool = quiet_option(),
 ) -> None:
     """Replace one entry that fails the check with the entry in a YAML file."""
     with refusals_reported():
         path = repair_entry(ctx.obj, header_prefix, entry_path)
-    typer.echo(path)
+    announce(path, quiet)

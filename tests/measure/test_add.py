@@ -846,3 +846,25 @@ def test_an_inline_summary_and_an_inline_rate_pair_their_number_with_the_unit_be
     rate = inline_item(measured, "draw rows 1,500.5/s over 3 min\n", {"throughput:rows": "1,500.5/min"})
     message = "item 1: throughput:rows reading '1,500.5/min': its raw text prints 1,500.5 beside s, never beside min"
     assert_refused(measured, entry_spec(measured, [rate]), message)
+
+
+def test_a_quiet_add_lands_its_entry_and_prints_nothing(measured: MeasuredTree) -> None:
+    spec = entry_spec(measured, [parsed_item(measured, measured.old)])
+    path = write_yaml(measured.root / SPEC_DIRECTORY / "entry.yaml", spec)
+    result = run_memento(measured.root, "measurement", "add", str(path.relative_to(measured.root)), "--quiet")
+    assert (result.exit_code, result.stdout, result.stderr) == (0, "", "")
+    assert measurement_log(measured).startswith("---\nkind: measurement\nid: m-20261001-001\n")
+
+
+def test_a_quiet_void_lands_its_document_and_prints_nothing(measured: MeasuredTree) -> None:
+    add_entry(measured, entry_spec(measured, [parsed_item(measured, measured.old)]))
+    before = measurement_log(measured)
+    result = run_memento(measured.root, "measurement", "void", "m-20261001-001#1", "--reason", "overlapped an evaluate", "--evidence", EVIDENCE, "--quiet")
+    assert (result.exit_code, result.stdout, result.stderr) == (0, "", "")
+    assert measurement_log(measured).startswith(before) and "kind: void" in measurement_log(measured)
+
+
+def test_a_refused_quiet_void_still_prints_its_refusal_on_stderr(measured: MeasuredTree) -> None:
+    result = run_memento(measured.root, "measurement", "void", "m-20261001-009", "--reason", "x", "--evidence", EVIDENCE, "--quiet")
+    assert (result.exit_code, result.stdout) == (1, "")
+    assert result.stderr.startswith("refused: ")
