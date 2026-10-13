@@ -427,3 +427,65 @@ def test_a_linked_worktrees_check_never_resolves_a_tracked_path_against_the_root
         f"FAIL  docs/conventions.md:8  points at '{TRACKED_SPEC}', which does not exist",
     ]
     assert check_findings(tree_citing_untracked_paths) == []
+
+
+SPAN_VARIABLE = "MEMENTO_SPAN"
+MAIN_SPAN_FILES = (MAIN_EVENTS, f"{DAY}/session.md", f"{DAY}/failures.md")
+
+
+def span_files_bytes(root: Path, files: tuple[str, ...]) -> dict[str, bytes | None]:
+    """The bytes of each named file, None for one that does not exist."""
+    return {name: (root / name).read_bytes() if (root / name).exists() else None for name in files}
+
+
+@pytest.mark.parametrize("verb", JOURNAL_VERBS.values(), ids=JOURNAL_VERBS.keys())
+def test_every_journal_verb_takes_its_span_from_the_environment_while_several_are_open(
+    record_tree: Path, monkeypatch: pytest.MonkeyPatch, verb: tuple[str, ...]
+) -> None:
+    open_side(record_tree)
+    main_before = span_files_bytes(record_tree, MAIN_SPAN_FILES)
+    monkeypatch.setenv(SPAN_VARIABLE, SIDE)
+    result = run_memento(record_tree, *verb)
+    assert (result.exit_code, result.stderr) == (0, "")
+    assert span_files_bytes(record_tree, MAIN_SPAN_FILES) == main_before
+
+
+def test_events_add_lands_in_the_span_the_environment_names(record_tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    open_side(record_tree)
+    monkeypatch.setenv(SPAN_VARIABLE, SIDE)
+    result = run_memento(record_tree, "events", "add", "owner", "decision", "side decided")
+    assert (result.exit_code, result.stdout) == (0, f"{SIDE_EVENTS}: 2026-10-01T10:30 | owner | decision | side decided\n")
+    assert (record_tree / SIDE_EVENTS).read_text(encoding="utf-8").endswith("side decided\n")
+
+
+def test_an_explicit_span_wins_over_the_environment(record_tree: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    open_side(record_tree)
+    side_before = (record_tree / SIDE_EVENTS).read_bytes()
+    monkeypatch.setenv(SPAN_VARIABLE, SIDE)
+    result = run_memento(record_tree, "events", "add", "--span", MAIN, "owner", "decision", "main decided")
+    assert (result.exit_code, result.stdout) == (0, f"{MAIN_EVENTS}: 2026-10-01T10:30 | owner | decision | main decided\n")
+    assert (record_tree / SIDE_EVENTS).read_bytes() == side_before
+
+
+@pytest.mark.parametrize(
+    ("named", "message"),
+    [
+        ("2026-09-30", "span 2026-09-30 is closed"),
+        ("2026-10-01-nope", "span 2026-10-01-nope has no events file"),
+        ("foo", f"span 'foo' {SPAN_SHAPE}"),
+    ],
+)
+def test_a_span_the_environment_names_that_is_not_open_is_refused_as_the_option_would(
+    record_tree: Path, monkeypatch: pytest.MonkeyPatch, named: str, message: str
+) -> None:
+    before = tree_bytes(record_tree)
+    monkeypatch.setenv(SPAN_VARIABLE, named)
+    result = run_memento(record_tree, "events", "add", "self", "decision", "x")
+    assert (result.exit_code, result.stdout, result.stderr) == (1, "", f"refused: {message}\n")
+    assert tree_bytes(record_tree) == before
+
+
+@pytest.mark.parametrize("verb", JOURNAL_VERBS.values(), ids=JOURNAL_VERBS.keys())
+def test_every_journal_verbs_help_names_the_span_variable(record_tree: Path, verb: tuple[str, ...]) -> None:
+    result = run_memento(record_tree, *verb[:2], "--help")
+    assert (result.exit_code, SPAN_VARIABLE in result.stdout) == (0, True)

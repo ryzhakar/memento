@@ -68,13 +68,17 @@ SESSION_TITLE = "# {day}\n"
 FAILURES_TITLE = "# {day} — failures\n"
 AFTER_CLOSE_HEADING = "## After the {time} close\n"
 EVENT_KIND_ADAPTER = TypeAdapter(EventKind)
-SPAN_HELP = "The span to act on: '<date>' or '<date>-<suffix>'. Omitted, the only open span; required while several are open."
-BASELINE_SPAN_HELP = "Read only this span's session record: '<date>' or '<date>-<suffix>'. Omitted, every session record; required while several spans are open."
+SPAN_VARIABLE = "MEMENTO_SPAN"
+SPAN_HELP = "The span to act on: '<date>' or '<date>-<suffix>'. Omitted, the span MEMENTO_SPAN names, else the only open span; required while several are open."
+BASELINE_SPAN_HELP = (
+    "Read only this span's session record: '<date>' or '<date>-<suffix>'. Omitted, the span MEMENTO_SPAN names, else every session record; "
+    "required while several spans are open."
+)
 
 
-def span_option() -> str | None:
-    """The `--span` option every journal verb takes."""
-    return typer.Option(None, "--span", help=SPAN_HELP)
+def span_option(help_text: str = SPAN_HELP) -> str | None:
+    """The `--span` option every journal verb takes, defaulting to the span the MEMENTO_SPAN variable names."""
+    return typer.Option(None, "--span", envvar=SPAN_VARIABLE, help=help_text)
 
 
 def named_span(text: str | None) -> Span | None:
@@ -141,8 +145,8 @@ def record_event(environment: Environment, actor: str, kind: str, what: str, wan
         "(the events home, <span date>/events.md or <span date>/events-<suffix>.md), stamped by the clock. Reads .claude/memento.yaml "
         "and the events files; prints '<events file>: <line>'. Refuses: a kind other than decision, discovery, commitment, "
         "delegation, receipt or attenuation; an actor other than owner, self, agent:<name> or tool:<name>; "
-        "a what that is not one line; a --span off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; "
-        "no open span; several open spans and no --span; a clock behind the events file's last line; "
+        "a what that is not one line; a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; "
+        "no open span; several open spans and neither --span nor MEMENTO_SPAN; a clock behind the events file's last line; "
         "the main span in a linked worktree (a suffixed span writes there); "
         "an events file whose working copy edits a line HEAD holds; a schema whose structure memento does not know."
     ),
@@ -210,9 +214,9 @@ def open_(
     "tail",
     help=(
         "Print a span's events file (the events home, <span date>/events.md or <span date>/events-<suffix>.md), open or closed, "
-        "from its last span-event line to its end: the --span named, else the only open span, else the most recently written. "
+        "from its last span-event line to its end: the --span or MEMENTO_SPAN named, else the only open span, else the most recently written. "
         "Reads .claude/memento.yaml and the events files; prints nothing when no events file exists. Writes nothing. "
-        "Refuses: a --span off the '<date>[-<suffix>]' shape or naming no events file; several open spans and no --span; "
+        "Refuses: a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape or naming no events file; several open spans and neither --span nor MEMENTO_SPAN; "
         "a schema whose structure memento does not know."
     ),
 )
@@ -262,8 +266,8 @@ def add_paragraphs(environment: Environment, texts: list[str], wanted: Span | No
         "(the digest home, <span date>/session.md or <span date>/session-<suffix>.md), created under a '# <span date>' title when absent; "
         "narrative after a close block opens under '## After the <HH:MM> close'. Reads .claude/memento.yaml, the "
         "span's events file and its session record; prints '<session record>: <line>' per line written. Refuses: an "
-        "argument holding a line break, empty or starting with a blank; an argument starting '## '; a --span off the "
-        "'<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; several open spans and no --span; "
+        "argument holding a line break, empty or starting with a blank; an argument starting '## '; a --span or MEMENTO_SPAN off the "
+        "'<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; several open spans and neither --span nor MEMENTO_SPAN; "
         "the main span in a linked worktree (a suffixed span writes there); a session record whose working copy edits a line HEAD holds."
     ),
 )
@@ -320,8 +324,8 @@ def close_span(environment: Environment, state: str, open_items: str, next_step:
         "and '<minute> | self | span-event | close; HEAD <head>; next: <next>' to its events file, in one act. HEAD is "
         "'<short sha> (clean)' or '<short sha> (dirty: <paths>)' from git status. A field's lines are separated by "
         "newlines. Reads .claude/memento.yaml, git, the events file and the session record; prints '<path>: <line>' per "
-        "line written. Refuses: a --span off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; "
-        "several open spans and no --span; a HEAD naming no commit; a state over the schema's state_max_lines (3); an empty field; a field line "
+        "line written. Refuses: a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; "
+        "several open spans and neither --span nor MEMENTO_SPAN; a HEAD naming no commit; a state over the schema's state_max_lines (3); an empty field; a field line "
         "starting with a blank; a next of more than one line; a changed path whose name holds ', '; a clock behind the "
         "events file's last line; the main span in a linked worktree (a suffixed span closes there); "
         "a file whose working copy edits a line HEAD holds; a schema whose structure or close labels memento does not know; "
@@ -346,13 +350,13 @@ def close(
     help=(
         "Print the newest close block across every session record under the digest home, as the record "
         "holds it: the one under the latest span date, then with the latest minute, then in the record whose file name sorts last, "
-        "then the later in its record. With --span, only that span's session record is read. "
+        "then the later in its record. With --span or MEMENTO_SPAN, only that span's session record is read. "
         "Prints nothing when no close block exists. Reads .claude/memento.yaml and the session records; writes nothing. "
-        "Refuses: a --span off the '<date>[-<suffix>]' shape or naming no events file; several open spans and no --span; "
+        "Refuses: a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape or naming no events file; several open spans and neither --span nor MEMENTO_SPAN; "
         "a schema whose structure memento does not know."
     ),
 )
-def baseline(ctx: typer.Context, span: str | None = typer.Option(None, "--span", help=BASELINE_SPAN_HELP)) -> None:
+def baseline(ctx: typer.Context, span: str | None = span_option(BASELINE_SPAN_HELP)) -> None:
     """Print the newest close block."""
     environment: Environment = ctx.obj
     root = environment.store.root
@@ -404,8 +408,8 @@ def add_failure(environment: Environment, title: str, what_happened: str, mechan
         "'# <span date> — failures' title when absent) and '<minute> | self | failure | <title>' to its events file, in "
         "one act. Reads .claude/memento.yaml, the events file and the failures file; prints '<path>: <line>' per line "
         "written. Refuses: a part that is empty, more than one line, or starting with a blank; a title already in the "
-        "failures file; a --span off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; "
-        "several open spans and no --span; a clock behind the events file's last line; the main span in a linked worktree "
+        "failures file; a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; no open span; "
+        "several open spans and neither --span nor MEMENTO_SPAN; a clock behind the events file's last line; the main span in a linked worktree "
         "(a suffixed span writes there); a file whose working copy edits a line HEAD holds; a schema whose structure or "
         "failure labels memento does not know."
     ),
