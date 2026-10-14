@@ -63,3 +63,7 @@ Keep the shipped default outside a scope's records; never count it as one.
 
 Check the shipped default against nothing; never search for a schema behind it.
 </stop-the-check-at-the-shipped-default>
+
+<check-with-the-tool>
+Run `memento check` to test every record against the schema in force on the three points above; it refuses a schema whose structure it does not know and prints each finding with its location; never declare a record conformant that the check flags.
+</check-with-the-tool>
