@@ -263,7 +263,7 @@ kinds:
     load: latent
     verification: witnessed
     admission: >
-      Nothing stood at ratification on 2026-10-14, and nothing is admitted
+      Nothing stood at ratification on 2026-10-13, and nothing is admitted
       after: span's other orchestration artifacts go to scratch
       (memento/pointers.py:193-207). Declared because memento derives the
       history directory from this home (memento/project.py:75-77).
@@ -308,9 +308,9 @@ baseline: >
 
 ratification: >
   No record stood on 2026-10-13, the day before setup, so no date exempts any
-  file from the checks. Journal files dated on or before that day are exempt
-  from the journal shape checks (memento/journal_checks.py:46-49) and from
-  history admission (memento/pointers.py:203).
+  file from the checks. A journal file dated on or before that day would be
+  exempt from the journal shape checks (memento/journal_checks.py:46-49) and
+  from history admission (memento/pointers.py:203); none exists.
 
 filing:
   - Living records (charter, frame, directive, fact, results, map, schema) hold only what is true now. Correct in place; never append corrections; never describe themselves; what a file is lives in map.
