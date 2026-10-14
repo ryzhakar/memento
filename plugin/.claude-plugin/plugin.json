@@ -1,0 +1,9 @@
+{
+  "name": "memento",
+  "version": "0.5.1",
+  "description": "A memory and record-keeping system for agents without continuity across sessions.",
+  "author": {"name": "ryzhakar"},
+  "repository": "https://github.com/ryzhakar/memento",
+  "license": "MIT",
+  "keywords": ["memory", "continuity", "sessions", "record-keeping", "agents"]
+}

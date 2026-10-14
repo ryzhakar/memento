@@ -1,0 +1,20 @@
+{
+  "name": "memento",
+  "owner": {
+    "name": "ryzhakar"
+  },
+  "plugins": [
+    {
+      "name": "memento",
+      "source": "./plugin",
+      "description": "A memory and record-keeping system for agents without continuity across sessions.",
+      "version": "0.5.1",
+      "author": {
+        "name": "ryzhakar"
+      },
+      "repository": "https://github.com/ryzhakar/memento",
+      "license": "MIT"
+    }
+  ],
+  "description": "The memento tool's own marketplace: the skills that keep a project's records, versioned with the tool that checks them."
+}
