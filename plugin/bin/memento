@@ -1,0 +1,11 @@
+#!/bin/bash
+# Run the memento tool at the release matching this plugin's version, so skill text and tool never differ.
+# MEMENTO_FROM overrides the source (a path or a git URL), for testing a working tree.
+set -euo pipefail
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.json" | head -1)"
+FROM="${MEMENTO_FROM:-git+https://github.com/ryzhakar/memento@v${VERSION}}"
+if [ -d "$FROM" ]; then
+  exec uvx --from "$FROM" --with-editable "$FROM" memento "$@"
+fi
+exec uvx --from "$FROM" memento "$@"
