@@ -5,3 +5,4 @@ dist/
 .pytest_cache/
 .ruff_cache/
 uv.lock
+docs/orchestration_log/recon/
