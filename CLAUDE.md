@@ -21,6 +21,12 @@ Each session opens with no memory of the last. What is written here and in the r
 - ground: owner, 2026-10-14: the README's opening sentence is the purpose, with efficiency and ergonomics for agents as the optimisation target; the project is perpetually maintained, taking agent feedback into account.
 - constraints: it does not become a one-stop shop for other needs (owner, 2026-10-14).
 
+### Goal 2 · tool and skills close · standing · active
+
+- object: the memento tool and the memento plugin's skills (plugin/ in this repository) work as one system: each skill step a verb performs names that verb, the two release together, and neither contradicts what the other refuses.
+- ground: owner, 2026-10-14: "bring the tool and the skill closer. figure out the synergy between them, etc. that's your goal", given after the plugin moved here from claude-skills with the owner's blessing.
+- constraints: Goal 1's limit holds: it does not become a one-stop shop (owner, 2026-10-14).
+
 ## Prime directives
 
 None stated by the owner.
