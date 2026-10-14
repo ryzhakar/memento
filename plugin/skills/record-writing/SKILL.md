@@ -97,3 +97,11 @@ Deliver a record bearing a mark and sitting at the home its kind gives; never de
 
 Read the finished record against every instruction above; never deliver one that breaks any.
 </check-the-record>
+
+<write-with-the-tool>
+Write a record of a kind a verb writes through that verb, which seats it at the kind's home, checks its shape, and refuses what the schema refuses: `memento directive` (add, replace, set a label, drop), `memento change` (add, supersede, set a field, repair, age the oldest out), `memento fact` (replace one exact passage), `memento spec` (add, replace a passage, archive), `memento measurement` (add, void), and the journal verbs `memento events`, `memento digest`, and `memento failure`; never hand-edit a record a verb writes.
+
+Commit records with `memento commit <subject> <path>...`, which runs every check first and commits the named paths alone; never commit a record that carries a FAIL.
+
+Write by hand a record of a kind no verb writes (the charter, the frame, the schema, the map, the deferrals), then run `memento check`; never leave such a record unchecked.
+</write-with-the-tool>
