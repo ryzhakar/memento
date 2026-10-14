@@ -1,0 +1,7 @@
+2026-10-14T20:03 | self | span-event | open; set up the memento project's records on the owner's order, copying the model project's setup
+2026-10-14T20:03 | owner | decision | purpose: the README's opening sentence, with efficiency and ergonomics for agents, its users, as the optimisation target
+2026-10-14T20:03 | owner | decision | the project runs on without an end point: perpetually maintained, taking agent feedback into account
+2026-10-14T20:03 | owner | decision | limit: memento does not become a one-stop shop for other needs
+2026-10-14T20:03 | owner | decision | README.md: the owner has not read it and does not intend to; no ruling, so it stays at its path unratified and the charter does not point at it
+2026-10-14T20:03 | self | decision | schema copied from the model project with the five kinds memento hard-codes but this project cannot use declared unused; ratified_on 2026-10-13 so no date exempts any file; code_roots memento/ only because tests/test_project.py:94 holds literal rule-citation text the scan flags; history_start_file .claude/memento.yaml; README.md declared a product. Invalidated if the owner rules otherwise or if the tool stops requiring the five kinds
+2026-10-14T20:03 | self | discovery | memento hard-codes 21 kinds, five of them the first project's own (results with 12 ML columns, string_recipes, label_audit, label_defects, report); a second project must declare and populate them (analysis: recon in the model repository); fixing the coupling is steward backlog
