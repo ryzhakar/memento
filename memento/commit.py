@@ -10,7 +10,7 @@ from memento import Environment, Refusal, announce, construct, quiet_option, ref
 from memento.findings import FAIL, normalized, run_checks
 from memento.git import git_exit_status, git_output
 from memento.journal_shapes import visible_single_line
-from memento.journal_spans import Span, named_span, span_files
+from memento.journal_spans import Span, named_span, span_files, span_or_file
 from memento.project import Project, project_of
 from memento.schema import Schema, agreeing_schema, kind_for, load_corpus
 from memento.store import record_lock, refuse_worktree
@@ -30,7 +30,7 @@ COMMIT_HELP = (
 )
 COMMIT_SPAN_HELP = (
     "Commit only this span's own events, session and failures files: '<date>' or '<date>-<suffix>'. A suffixed span "
-    "may commit from a linked worktree, in that worktree. Unlike the journal verbs, commit does not read MEMENTO_SPAN."
+    "may commit from a linked worktree, in that worktree. Omitted, the span a .memento-span file names; unlike the journal verbs, commit does not read MEMENTO_SPAN."
 )
 
 
@@ -118,7 +118,7 @@ def commit(
     ctx: typer.Context,
     subject: str = typer.Argument(..., help="The commit subject after the commit type, within the project's word cap."),
     paths: list[str] = typer.Argument(..., help="The record paths to commit, relative to the project root."),
-    span: str | None = typer.Option(None, "--span", help=COMMIT_SPAN_HELP),
+    span: str | None = typer.Option(None, "--span", callback=span_or_file, help=COMMIT_SPAN_HELP),
     quiet: bool = quiet_option(),
 ) -> None:
     """Commit the named record paths after a green check."""

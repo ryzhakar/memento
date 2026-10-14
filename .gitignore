@@ -7,3 +7,4 @@ dist/
 uv.lock
 docs/orchestration_log/recon/
 .claude/work-silently
+.memento-span

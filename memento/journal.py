@@ -44,6 +44,7 @@ from memento.journal_spans import (
     events_tail,
     lineage_head,
     named_span,
+    span_or_file,
     newest_close_block,
     open_since,
     open_span_events,
@@ -78,16 +79,16 @@ FAILURES_TITLE = "# {day} — failures\n"
 AFTER_CLOSE_HEADING = "## After the {time} close\n"
 EVENT_KIND_ADAPTER = TypeAdapter(EventKind)
 SPAN_VARIABLE = "MEMENTO_SPAN"
-SPAN_HELP = "The span to act on: '<date>' or '<date>-<suffix>'. Omitted, the span MEMENTO_SPAN names, else the only open span; required while several are open."
+SPAN_HELP = "The span to act on: '<date>' or '<date>-<suffix>'. Omitted, the span MEMENTO_SPAN names, else the one a .memento-span file names, else the only open span; required while several are open."
 BASELINE_SPAN_HELP = (
-    "Read only this span's session record: '<date>' or '<date>-<suffix>'. Omitted, the span MEMENTO_SPAN names, else every session record; "
+    "Read only this span's session record: '<date>' or '<date>-<suffix>'. Omitted, the span MEMENTO_SPAN names, else the one a .memento-span file names, else every session record; "
     "required while several spans are open."
 )
 
 
 def span_option(help_text: str = SPAN_HELP) -> str | None:
     """The `--span` option every journal verb takes, defaulting to the span the MEMENTO_SPAN variable names."""
-    return typer.Option(None, "--span", envvar=SPAN_VARIABLE, help=help_text)
+    return typer.Option(None, "--span", envvar=SPAN_VARIABLE, callback=span_or_file, help=help_text)
 
 
 def span_transaction(store: Store, schema: Schema, span: Span) -> AbstractContextManager[Act]:

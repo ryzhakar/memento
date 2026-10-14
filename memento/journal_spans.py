@@ -73,6 +73,25 @@ def parse_span(text: str) -> Span:
     return construct(Span, day=named["day"], suffix=named["suffix"])
 
 
+SPAN_FILE = ".memento-span"
+
+
+def span_file_text(start: Path) -> str | None:
+    """The text of the nearest `.memento-span` file, looking from `start` up to the first directory holding `.git`, or None when there is none."""
+    for directory in (start, *start.parents):
+        named = directory / SPAN_FILE
+        if named.is_file():
+            return named.read_text().strip()
+        if (directory / ".git").exists():
+            return None
+    return None
+
+
+def span_or_file(text: str | None) -> str | None:
+    """The span a `--span` option holds, else the one the `.memento-span` file beside the working directory's checkout names, else None."""
+    return text if text is not None else span_file_text(Path.cwd())
+
+
 def named_span(text: str | None) -> Span | None:
     """The span a `--span` argument names, or None when it was omitted."""
     return None if text is None else parse_span(text)
