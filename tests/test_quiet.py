@@ -157,7 +157,7 @@ WRITE_CASES: dict[str, Case] = {
 
 def test_the_write_cases_cover_every_write_verb_but_the_measurement_log() -> None:
     covered = {tuple(name.split()[:2]) if name != "commit" else ("commit",) for name in WRITE_CASES}
-    assert covered == verb_paths().keys() - READ_VERBS - {("measurement", "add"), ("measurement", "void")}
+    assert covered == verb_paths().keys() - READ_VERBS - {("measurement", "add"), ("measurement", "void"), ("init",)}  # init writes only into an empty repository: tests/test_scaffold.py
 
 
 @pytest.mark.parametrize("case", WRITE_CASES.values(), ids=WRITE_CASES.keys())
