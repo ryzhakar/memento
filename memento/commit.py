@@ -25,8 +25,12 @@ COMMIT_HELP = (
     "line per path. Refuses: a path no record kind covers, a scratch path or a product path; a record of a kind no "
     "memento verb writes (label_audit, label_defects, report); a path with no change; a subject over the cap or of "
     "more than one line; any FAIL finding; a worktree without --span naming a suffixed span; with --span, a path "
-    "that is not that span's events, session or failures file; a commit git rejects, after which the named paths "
-    "are unstaged."
+    "that is not that span's events, session or failures file; with --fold, a HEAD on a remote branch or one that "
+    "changed a path the fold does not name; a commit git rejects, after which the named paths are unstaged."
+)
+COMMIT_FOLD_HELP = (
+    "Amend the previous commit with these paths instead of adding one, under the given subject. Refuses while HEAD is on "
+    "a remote branch, or when HEAD changed a path the fold does not name."
 )
 COMMIT_SPAN_HELP = (
     "Commit only this span's own events, session and failures files: '<date>' or '<date>-<suffix>'. A suffixed span "
@@ -91,7 +95,17 @@ def refuse_failing_records(environment: Environment) -> None:
         raise Refusal(f"the records hold {failures} {FAIL}; 'memento check' lists them")
 
 
-def commit_records(environment: Environment, subject: str, paths: list[str], span: Span | None) -> tuple[str, str, list[str]]:
+def refuse_unfoldable_head(root: Path, records: list[str]) -> None:
+    """Refuse a fold unless HEAD is on no remote branch and changed only the named paths."""
+    if git_output(root, "branch", "-r", "--contains", "HEAD").strip():
+        raise Refusal("HEAD is on a remote branch; a fold rewrites only a commit not yet pushed")
+    head_paths = set(git_output(root, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD").split())
+    outside = sorted(head_paths - set(records))
+    if outside:
+        raise Refusal(f"HEAD also changed {', '.join(outside)}, which the fold does not name; commit these paths on their own")
+
+
+def commit_records(environment: Environment, subject: str, paths: list[str], span: Span | None, fold: bool = False) -> tuple[str, str, list[str]]:
     """Commit the named record paths alone under '<commit_type>: <subject>' once every check passes, returning the commit's short sha, its message and the paths; a named span confines the paths to its own journal files."""
     root = environment.store.root
     refuse_worktree_unless_suffixed(root, span)
@@ -106,8 +120,11 @@ def commit_records(environment: Environment, subject: str, paths: list[str], spa
             refuse_unwritten_path(schema, path)
             refuse_unchanged_path(root, path)
         refuse_failing_records(environment)
+        if fold:
+            refuse_unfoldable_head(root, records)
         git_output(root, "add", "--", *records)
-        committed = git_exit_status(root, "commit", "-q", "-m", message.render(project), "--", *records)
+        amend = ["--amend"] if fold else []
+        committed = git_exit_status(root, "commit", "-q", *amend, "-m", message.render(project), "--", *records)
         if committed.returncode != 0:
             git_output(root, "reset", "-q", "--", *records)
             raise Refusal(f"git did not commit, so the records are unstaged: {committed.stderr.decode(errors='replace').strip()}")
@@ -119,9 +136,10 @@ def commit(
     subject: str = typer.Argument(..., help="The commit subject after the commit type, within the project's word cap."),
     paths: list[str] = typer.Argument(..., help="The record paths to commit, relative to the project root."),
     span: str | None = typer.Option(None, "--span", callback=span_or_file, help=COMMIT_SPAN_HELP),
+    fold: bool = typer.Option(False, "--fold", help=COMMIT_FOLD_HELP),
     quiet: bool = quiet_option(),
 ) -> None:
     """Commit the named record paths after a green check."""
     with refusals_reported():
-        sha, message, records = commit_records(ctx.obj, subject, paths, named_span(span))
+        sha, message, records = commit_records(ctx.obj, subject, paths, named_span(span), fold)
     announce("\n".join([f"{sha} {message}", *records]), quiet)

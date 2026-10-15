@@ -193,3 +193,29 @@ def test_the_commit_help_names_the_span_option_and_the_worktree_it_opens(record_
     assert result.exit_code == 0
     for phrase in ("--span", "in a linked worktree", "a worktree without --span naming a suffixed span", "that is not that span's events, session or failures file", "does not read MEMENTO_SPAN"):
         assert phrase in text
+
+
+def test_fold_amends_an_unpushed_head_that_changed_only_the_named_paths(record_tree: Path) -> None:
+    git(record_tree, "config", "user.name", "fixture")
+    git(record_tree, "config", "user.email", "fixture@example.com")
+    replace_once(record_tree, "docs/capabilities.md", "slices its input.", "slices its input in pieces.")
+    first = run_memento(record_tree, "commit", "first edit", "docs/capabilities.md")
+    assert first.exit_code == 0, first.output
+    before = git(record_tree, "rev-list", "--count", "HEAD").strip()
+    replace_once(record_tree, "docs/capabilities.md", "in pieces.", "in small pieces.")
+    folded = run_memento(record_tree, "commit", "--fold", "both edits", "docs/capabilities.md")
+    assert folded.exit_code == 0, folded.output
+    assert git(record_tree, "rev-list", "--count", "HEAD").strip() == before
+    assert "both edits" in git(record_tree, "log", "-1", "--format=%s")
+
+
+def test_fold_refuses_a_head_that_changed_another_path(record_tree: Path) -> None:
+    git(record_tree, "config", "user.name", "fixture")
+    git(record_tree, "config", "user.email", "fixture@example.com")
+    replace_once(record_tree, "docs/capabilities.md", "slices its input.", "slices its input in pieces.")
+    (record_tree / "other.txt").write_text("other\n")
+    git(record_tree, "add", "-A")
+    git(record_tree, "commit", "-q", "-m", "docs: unrelated work")
+    replace_once(record_tree, "docs/capabilities.md", "in pieces.", "in small pieces.")
+    refused = run_memento(record_tree, "commit", "--fold", "x", "docs/capabilities.md")
+    assert refused.exit_code != 0 and "also changed" in refused.output
