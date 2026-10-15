@@ -116,8 +116,21 @@ def matches_glob(path: str, pattern: str) -> bool:
 
 
 def run_checks(corpus: Corpus, checks: Iterable[Check]) -> list[Finding]:
-    """Every finding of every check over a corpus, in the checks' order."""
-    return [finding for check_records in checks for finding in check_records(corpus)]
+    """Every finding of every check over a corpus, in the checks' order; a check that needs a schema key the schema lacks, or a record that is absent, fails instead of crashing."""
+    from memento.schema import SCHEMA_HOME  # noqa: PLC0415 -- schema imports this module
+
+    findings: list[Finding] = []
+    for check_records in checks:
+        try:
+            findings.extend(check_records(corpus))
+        except KeyError as missing:
+            name = getattr(check_records, "__name__", None) or getattr(getattr(check_records, "func", None), "__name__", "a check")
+            findings.append(fail(SCHEMA_HOME, f"{name} needs the schema key {missing}, which the schema does not declare"))
+        except FileNotFoundError as absent:
+            where = Path(str(absent.filename))
+            shown = where.relative_to(corpus.root).as_posix() if where.is_absolute() and where.is_relative_to(corpus.root) else str(where)
+            findings.append(fail(shown, "the record a declared kind needs is absent"))
+    return findings
 
 
 def split_entries(text: str) -> Iterator[tuple[int, str, list[str]]]:
