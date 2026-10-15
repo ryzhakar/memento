@@ -113,14 +113,24 @@ def project_block(ratified_on: str, main_branch: str, code_roots: list[str], mea
     return yaml.safe_dump(block, sort_keys=False)
 
 
+def schema_text(owner: str, ratified_on: str, today: str, project: str) -> str:
+    """The scaffold schema with its placeholders filled and the `project:` block appended."""
+    template = resources.files("memento").joinpath("scaffold/memento.yaml").read_text()
+    filled = template.replace(PLACEHOLDER_RATIFIED_ON, ratified_on).replace(PLACEHOLDER_OWNER, owner).replace(PLACEHOLDER_TODAY, today)
+    return filled + "\n" + project
+
+
+def shipped_default() -> str:
+    """The text of the plugin's `config/default.yaml`: the scaffold schema with neutral values, generated so the two never differ."""
+    project = project_block("2000-01-01", "main", [], "", "docs", 9)
+    return schema_text("the owner", "2000-01-01", "2000-01-01", project)
+
+
 def scaffold(root: Path, name: str, owner: str, ratified_on: str, main_branch: str, code_roots: list[str], measured_cli: str, commit_type: str, words: int) -> list[str]:
     """Write the schema and every stub under root, refusing to touch a path that already exists; return the paths written."""
-    schema_text = resources.files("memento").joinpath("scaffold/memento.yaml").read_text()
-    schema_text = (
-        schema_text.replace(PLACEHOLDER_RATIFIED_ON, ratified_on).replace(PLACEHOLDER_OWNER, owner).replace(PLACEHOLDER_TODAY, date.today().isoformat())
-    )
+    project = project_block(ratified_on, main_branch, code_roots, measured_cli, commit_type, words)
     files = {
-        SCHEMA_HOME: schema_text + "\n" + project_block(ratified_on, main_branch, code_roots, measured_cli, commit_type, words),
+        SCHEMA_HOME: schema_text(owner, ratified_on, date.today().isoformat(), project),
         "CLAUDE.md": CHARTER_STUB.format(name=name),
         ".claude/memento-map.md": map_stub(name),
         **STUBS,

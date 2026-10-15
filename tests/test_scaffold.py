@@ -45,3 +45,10 @@ def test_init_under_quiet_writes_and_prints_nothing(tmp_path: Path) -> None:
     assert done.returncode == 0
     assert done.stdout == ""
     assert (root / ".claude" / "memento.yaml").is_file()
+
+
+def test_the_plugins_shipped_default_is_the_scaffold_schema() -> None:
+    from memento.scaffold import shipped_default
+
+    shipped = Path(__file__).resolve().parent.parent / "plugin" / "config" / "default.yaml"
+    assert shipped.read_text() == shipped_default()
