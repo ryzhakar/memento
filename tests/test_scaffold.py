@@ -72,3 +72,14 @@ def test_the_tool_and_the_plugin_carry_one_version() -> None:
     plugin = json.loads((root / "plugin" / ".claude-plugin" / "plugin.json").read_text())["version"]
     marketplace = json.loads((root / ".claude-plugin" / "marketplace.json").read_text())["plugins"][0]["version"]
     assert tool == plugin == marketplace
+
+
+def test_a_verb_in_a_project_with_no_schema_refuses_without_a_traceback(tmp_path: Path) -> None:
+    root = fresh_repository(tmp_path)
+    (root / "a.txt").write_text("a\n")
+    commit_all(root)
+    for verb in ("patdown", "check"):
+        done = run(root, verb)
+        assert done.returncode != 0
+        assert "Traceback" not in done.stderr
+        assert "memento init" in done.stderr + done.stdout

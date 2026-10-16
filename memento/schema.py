@@ -67,7 +67,10 @@ type Schema = dict[str, Any]
 
 def load_schema(root: Path) -> Schema:
     """The schema as root's `.claude/memento.yaml` declares it."""
-    return schema_mapping(yaml.safe_load((root / SCHEMA_HOME).read_text(encoding="utf-8")))
+    schema_file = root / SCHEMA_HOME
+    if not schema_file.is_file():
+        raise Refusal(f"{SCHEMA_HOME} not found under {root}; run `memento init` in a new project")
+    return schema_mapping(yaml.safe_load(schema_file.read_text(encoding="utf-8")))
 
 
 def load_corpus(root: Path) -> Corpus:
