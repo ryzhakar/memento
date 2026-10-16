@@ -23,3 +23,34 @@ def test_a_foreign_schema_is_refused_or_failed_without_a_traceback(tmp_path: Pat
     assert done.returncode != 0
     assert "Traceback" not in done.stderr
     assert "project:" in done.stderr + done.stdout or "FAIL" in done.stdout
+
+
+def test_a_check_bug_keyerror_is_not_taken_for_a_missing_schema_key() -> None:
+    from memento.findings import Corpus, run_checks
+
+    def buggy(corpus: Corpus):
+        raise KeyError("a bug, not the schema")
+        yield
+
+    corpus = Corpus(root=Path("/nonexistent-root"), schema={}, tracked=[])
+    try:
+        run_checks(corpus, [buggy])
+    except KeyError as raised:
+        assert "a bug, not the schema" in str(raised)
+    else:
+        raise AssertionError("the KeyError was swallowed")
+
+
+def test_a_file_not_found_outside_the_project_is_not_taken_for_a_missing_record() -> None:
+    from memento.findings import Corpus, run_checks
+
+    def missing_tool(corpus: Corpus):
+        raise FileNotFoundError(2, "No such file", "git")
+        yield
+
+    corpus = Corpus(root=Path("/nonexistent-root"), schema={}, tracked=[])
+    try:
+        run_checks(corpus, [missing_tool])
+    except FileNotFoundError:
+        return
+    raise AssertionError("the FileNotFoundError was swallowed")

@@ -9,7 +9,7 @@ import yaml
 
 from memento import Refusal
 from memento.actor import ACTOR_FORMS
-from memento.findings import Corpus, Finding, fail
+from memento.findings import Corpus, Finding, fail, schema_mapping
 from memento.git import is_worktree, main_checkout, tracked_files
 
 SCHEMA_HOME = ".claude/memento.yaml"
@@ -67,7 +67,7 @@ type Schema = dict[str, Any]
 
 def load_schema(root: Path) -> Schema:
     """The schema as root's `.claude/memento.yaml` declares it."""
-    return yaml.safe_load((root / SCHEMA_HOME).read_text(encoding="utf-8"))
+    return schema_mapping(yaml.safe_load((root / SCHEMA_HOME).read_text(encoding="utf-8")))
 
 
 def load_corpus(root: Path) -> Corpus:

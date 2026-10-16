@@ -132,8 +132,8 @@ kinds:
     columns: [approach, world, labels, folds, R@P95/fold, P@R10/fold, P@R30/fold, P@R50/fold, bar, run, verdict, date]
     admission: >
       Unused: this project has no contenders. Declared because memento knows
-      every kind (memento/schema.py:29-51) and checks a table of these twelve
-      columns (memento/living.py:334-349).
+      every kind and checks a table of these twelve
+      columns.
 
   measurement:
     home: docs/measurements.yaml
@@ -142,8 +142,7 @@ kinds:
     verification: measured
     format: >
       YAML stream, one block-form document per entry, written and read only
-      through `memento measurement`, which enforces entry shape; owner
-      the owner's rulings recorded in this project.
+      through `memento measurement`, which enforces entry shape; owner rulings are recorded in this project.
       Memory in bytes, time in nanoseconds, each with its resolution; no floats.
     admission: >
       Every performance reading (wall time, CPU time, peak memory, disk,
@@ -181,8 +180,7 @@ kinds:
     verification: measured
     admission: >
       Unused: this project compares no strings. Declared because memento knows
-      every kind (memento/schema.py:29-51) and reads the file
-      (memento/pointers.py:128-131).
+      every kind and reads the file.
 
   label_audit:
     home: docs/label-audit-methodology.md
@@ -191,8 +189,7 @@ kinds:
     verification: measured
     admission: >
       Unused: this project has no labels. Declared because memento knows every
-      kind (memento/schema.py:29-51) and demands a map row and a file for each
-      (memento/living.py:79-83).
+      kind and demands a map row and a file for each.
 
   label_defects:
     home: docs/label-data-defects.md
@@ -201,8 +198,7 @@ kinds:
     verification: measured
     admission: >
       Unused: this project has no labels. Declared because memento knows every
-      kind (memento/schema.py:29-51) and demands a map row and a file for each
-      (memento/living.py:79-83).
+      kind and demands a map row and a file for each.
 
   reference:
     home: docs/reference/
@@ -264,9 +260,8 @@ kinds:
     verification: witnessed
     admission: >
       Nothing stood at ratification on 2000-01-01, and nothing is admitted
-      after: span's other orchestration artifacts go to scratch
-      (memento/pointers.py:193-207). Declared because memento derives the
-      history directory from this home (memento/project.py:75-77).
+      after: span's other orchestration artifacts go to scratch. Declared because memento derives the
+      history directory from this home.
 
   scratch:
     home: docs/orchestration_log/recon/{date}/
@@ -274,7 +269,7 @@ kinds:
     load: latent
     disposable: true
     verification: none
-    admission: Claims under verification, drafts, worker returns at claim grade. Gitignored; binds nothing.
+    admission: Claims under verification, drafts, worker returns at claim grade. Binds nothing.
 
   archived:
     home: docs/orchestration_log/archive/
@@ -297,10 +292,9 @@ events:
 token_estimate:
   tokens_per_word: 2.5
   measured: >
-    Carried from memento's own setup, not measured on this project's files:
-    2026-09-24, cl100k counts over its self-loading files and map, 2.49
-    overall, 2.2–2.9 per file (YAML highest). budget_tokens is words ×
-    tokens_per_word.
+    Not measured on this project's files: the figure is the estimate memento's
+    own setup found (2.49 tokens per word over its self-loading files). Replace
+    it when this project counts its own. budget_tokens is words × tokens_per_word.
 
 baseline: >
   No baseline record. Expected state: newest session record's close block plus
@@ -309,8 +303,8 @@ baseline: >
 ratification: >
   No record stood on 2000-01-01, the day before setup, so no date exempts any
   file from the checks. A journal file dated on or before that day would be
-  exempt from the journal shape checks (memento/journal_checks.py:46-49) and
-  from history admission (memento/pointers.py:203); none exists.
+  exempt from the journal shape checks and
+  from history admission; none exists.
 
 filing:
   - Living records (charter, frame, directive, fact, results, map, schema) hold only what is true now. Correct in place; never append corrections; never describe themselves; what a file is lives in map.
@@ -346,9 +340,7 @@ provenance_form:
   example: '"— owner ruling, 2000-01-01, grounded on CLAUDE.md@<sha>"; "— measured, 2000-01-01".'
   pointer_durability: Every path a mark names is committed, or commit SHA. recon/ carries no provenance.
 
-products:
-  - path: README.md
-    reason: The package readme named by pyproject.toml; users read it, records are not a human concern.
+products: []
 
 retired: []
 

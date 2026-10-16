@@ -115,21 +115,42 @@ def matches_glob(path: str, pattern: str) -> bool:
     return len(path_parts) == len(pattern_parts) and all(map(fnmatch.fnmatchcase, path_parts, pattern_parts))
 
 
+class SchemaKeyError(KeyError):
+    """A key the schema does not declare, raised by a schema mapping so a check's own KeyError is never taken for it."""
+
+
+class SchemaMapping(dict):
+    """A mapping read from the schema whose missing key raises SchemaKeyError."""
+
+    def __missing__(self, key: object) -> object:
+        raise SchemaKeyError(key)
+
+
+def schema_mapping(value: Any) -> Any:
+    """The value with every mapping inside it turned into a SchemaMapping."""
+    if isinstance(value, dict):
+        return SchemaMapping({key: schema_mapping(item) for key, item in value.items()})
+    if isinstance(value, list):
+        return [schema_mapping(item) for item in value]
+    return value
+
+
 def run_checks(corpus: Corpus, checks: Iterable[Check]) -> list[Finding]:
-    """Every finding of every check over a corpus, in the checks' order; a check that needs a schema key the schema lacks, or a record that is absent, fails instead of crashing."""
+    """Every finding of every check over a corpus, in the checks' order; a schema key the schema lacks, or a record under the project that is absent, fails instead of crashing, and any other error still raises."""
     from memento.schema import SCHEMA_HOME  # noqa: PLC0415 -- schema imports this module
 
     findings: list[Finding] = []
     for check_records in checks:
         try:
             findings.extend(check_records(corpus))
-        except KeyError as missing:
+        except SchemaKeyError as missing:
             name = getattr(check_records, "__name__", None) or getattr(getattr(check_records, "func", None), "__name__", "a check")
             findings.append(fail(SCHEMA_HOME, f"{name} needs the schema key {missing}, which the schema does not declare"))
         except FileNotFoundError as absent:
             where = Path(str(absent.filename))
-            shown = where.relative_to(corpus.root).as_posix() if where.is_absolute() and where.is_relative_to(corpus.root) else str(where)
-            findings.append(fail(shown, "the record a declared kind needs is absent"))
+            if not (where.is_absolute() and where.is_relative_to(corpus.root)):
+                raise
+            findings.append(fail(where.relative_to(corpus.root).as_posix(), "the record a declared kind needs is absent"))
     return findings
 
 

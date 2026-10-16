@@ -219,3 +219,15 @@ def test_fold_refuses_a_head_that_changed_another_path(record_tree: Path) -> Non
     replace_once(record_tree, "docs/capabilities.md", "in pieces.", "in small pieces.")
     refused = run_memento(record_tree, "commit", "--fold", "x", "docs/capabilities.md")
     assert refused.exit_code != 0 and "also changed" in refused.output
+
+
+def test_fold_refuses_a_root_commit_that_changed_another_path(tmp_path: Path) -> None:
+    git(tmp_path, "init", "-q", "-b", "main")
+    (tmp_path / "app.py").write_text("x = 1\n")
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-q", "-m", "root")
+    from memento.commit import refuse_unfoldable_head
+    from memento import Refusal
+
+    with pytest.raises(Refusal):
+        refuse_unfoldable_head(tmp_path, ["docs/capabilities.md"])

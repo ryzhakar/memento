@@ -30,7 +30,7 @@ COMMIT_HELP = (
 )
 COMMIT_FOLD_HELP = (
     "Amend the previous commit with these paths instead of adding one, under the given subject. Refuses while HEAD is on "
-    "a remote branch, or when HEAD changed a path the fold does not name."
+    "a remote branch as last fetched, or when HEAD changed a path the fold does not name."
 )
 COMMIT_SPAN_HELP = (
     "Commit only this span's own events, session and failures files: '<date>' or '<date>-<suffix>'. A suffixed span "
@@ -99,7 +99,7 @@ def refuse_unfoldable_head(root: Path, records: list[str]) -> None:
     """Refuse a fold unless HEAD is on no remote branch and changed only the named paths."""
     if git_output(root, "branch", "-r", "--contains", "HEAD").strip():
         raise Refusal("HEAD is on a remote branch; a fold rewrites only a commit not yet pushed")
-    head_paths = set(git_output(root, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD").split())
+    head_paths = set(git_output(root, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", "HEAD").split())
     outside = sorted(head_paths - set(records))
     if outside:
         raise Refusal(f"HEAD also changed {', '.join(outside)}, which the fold does not name; commit these paths on their own")

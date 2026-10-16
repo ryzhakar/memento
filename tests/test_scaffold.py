@@ -61,3 +61,14 @@ def test_check_in_a_repository_with_no_commit_refuses_without_a_traceback(tmp_pa
     assert checked.returncode != 0
     assert "Traceback" not in checked.stderr
     assert "HEAD names no commit" in checked.stderr + checked.stdout
+
+
+def test_the_tool_and_the_plugin_carry_one_version() -> None:
+    import json
+    import tomllib
+
+    root = Path(__file__).resolve().parent.parent
+    tool = tomllib.loads((root / "pyproject.toml").read_text())["project"]["version"]
+    plugin = json.loads((root / "plugin" / ".claude-plugin" / "plugin.json").read_text())["version"]
+    marketplace = json.loads((root / ".claude-plugin" / "marketplace.json").read_text())["plugins"][0]["version"]
+    assert tool == plugin == marketplace

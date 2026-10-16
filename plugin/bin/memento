@@ -4,6 +4,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.json" | head -1)"
+[ -n "$VERSION" ] || { echo "memento launcher: no version in $ROOT/.claude-plugin/plugin.json" >&2; exit 1; }
 FROM="${MEMENTO_FROM:-git+https://github.com/ryzhakar/memento@v${VERSION}}"
 if [ -d "$FROM" ]; then
   exec uvx --from "$FROM" --with-editable "$FROM" memento "$@"
