@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from memento import REFUSED_EXIT_CODE, Environment, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, refusals_reported, scaffold, schema
+from memento import REFUSED_EXIT_CODE, Environment, Refusal, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, refusals_reported, scaffold, schema
 from memento.findings import FAIL, Check, run_checks
 from memento.git import git_exit_status
 from memento.measure.check import check_measurement_log
@@ -60,17 +60,24 @@ app.command("patdown", help=read.PATDOWN_HELP)(read.patdown)
 app.command("init", help=scaffold.INIT_HELP)(scaffold.init)
 
 
+def refuse_unborn_repository(root: Path) -> None:
+    """Refuse a repository whose HEAD names no commit: the journal checks read its history."""
+    if git_exit_status(root, "rev-parse", "--verify", "-q", "HEAD").returncode != 0:
+        raise Refusal("HEAD names no commit; commit the records once, so the checks have a history to read")
+
+
 @app.command(
     help=(
         "Check every record under the project's git checkout (the top level of the working directory's repository) "
         "against .claude/memento.yaml. Prints one 'LEVEL  where  message' line per finding and a 'records: <n> FAIL, "
-        "<m> WARN' summary on stdout; exits 1 on any FAIL. Writes nothing."
+        "<m> WARN' summary on stdout; exits 1 on any FAIL. Writes nothing. Refuses a repository whose HEAD names no commit."
     )
 )
 def check(ctx: typer.Context) -> None:
     """Report every record finding and exit 1 on any failing one."""
     environment: Environment = ctx.obj
     with refusals_reported():
+        refuse_unborn_repository(environment.store.root)
         findings = run_checks(load_corpus(environment.store.root), environment.checks)
     for finding in findings:
         typer.echo(f"{finding.level}  {finding.where}  {finding.message}")

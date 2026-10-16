@@ -52,3 +52,12 @@ def test_the_plugins_shipped_default_is_the_scaffold_schema() -> None:
 
     shipped = Path(__file__).resolve().parent.parent / "plugin" / "config" / "default.yaml"
     assert shipped.read_text() == shipped_default()
+
+
+def test_check_in_a_repository_with_no_commit_refuses_without_a_traceback(tmp_path: Path) -> None:
+    root = fresh_repository(tmp_path)
+    run(root, "init", "--quiet")
+    checked = run(root, "check")
+    assert checked.returncode != 0
+    assert "Traceback" not in checked.stderr
+    assert "HEAD names no commit" in checked.stderr + checked.stdout

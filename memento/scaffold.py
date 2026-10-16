@@ -1,4 +1,4 @@
-"""`memento init`: write a new project's schema and the stub record of every kind, so `memento check` passes at once."""
+"""`memento init`: write a new project's schema and the stub record of every kind, so `memento check` passes once its files are committed."""
 
 from datetime import date, timedelta
 from importlib import resources
@@ -147,7 +147,7 @@ def scaffold(root: Path, name: str, owner: str, ratified_on: str, main_branch: s
 
 INIT_HELP = (
     "Write a new project's schema (.claude/memento.yaml, its project: block from the options and git) and the stub record "
-    "of every kind, so 'memento check' passes at once. Reads git (the checkout's top level and branch). Writes the "
+    "of every kind, so 'memento check' passes once the files are committed. Reads git (the checkout's top level and branch). Writes the "
     "files and commits nothing. Prints one path per file written. Refuses: a path that already exists, naming every one "
     "present, before writing any; a directory that is not inside a git checkout."
 )
