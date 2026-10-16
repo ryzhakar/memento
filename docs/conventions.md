@@ -26,4 +26,11 @@ never   take "I read it" without the counts
 why     an agent's binding report once claimed full manifesto loads while four of five stopped at the tool output cap
 ground  docs/orchestration_log/history/2026-10-16/events.md, the decision line of 2026-10-16 adopting commons line 86 (maximalist-review, 2026-10-16T14:13+0300); checked against the steward's own reviewer
 
+### agent-correction-in-the-brief
+when    correcting an agent that is already running
+do      write the correction into the agent's brief file in the same turn, then message the agent
+never   leave a correction only in the message
+why     a correction lives only in the running agent's context, and the next agent briefed from the same file repeats the defect
+ground  docs/orchestration_log/history/2026-10-16/events.md, the decision line of 2026-10-16 adopting commons line 91 (maximalist-review, 2026-10-16T21:13+0300)
+
 ## owner
