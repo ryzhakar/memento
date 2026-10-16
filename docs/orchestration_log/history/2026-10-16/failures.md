@@ -23,3 +23,11 @@ What happened: My hourly heartbeat wrote a journal line, a card update and a com
 Mechanism: The cron prompt I laid on 2026-10-14 ended with 'write events in the memento journal for what happened', which I read as 'write one every wake'; no record or check named a nothing-new line as padding, so the habit grew by repetition and each line cost a commit or a fold.
 
 Correction: Rewrote the wake prompt (recon/2026-10-15/memento-wake-prompt.md) so a wake with nothing changed writes no line, commits nothing, edits no card and ends with an empty reply; re-laid the cron from it; the heartbeat lines already written stay, as written traces do.
+
+## The plugin's launcher tag was never pushed
+
+What happened: The memento plugin 0.6.0 was installed and its skills and hook called a launcher that resolves tag v0.6.0, which did not exist on origin, so every verb through it failed for about 30 hours; I knew the tag was missing from 2026-10-16T11:43.
+
+Mechanism: I held the tag and push as the owner's release step and reported it as waiting, without weighing that the plugin was already installed and its launcher already broken.
+
+Correction: Tagged v0.6.0 at the installed commit 358f1ee and pushed that tag alone (no new content), checked the launcher builds it; a release that installed code depends on is tagged in the same act as its install.
