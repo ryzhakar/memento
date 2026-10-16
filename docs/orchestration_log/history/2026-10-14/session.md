@@ -24,3 +24,15 @@ state   tool v0.2.4 (8a3f1de) pinned by the first project; this repository's rec
         the owner's decisions are open: see the open line
 open    owner: charter prime directives, README.md ruling, importing the general conventions from the first project, the spec's move into this repository, pushing local main, renaming the session, the backlog order
 next    recover the peer card: read the new session's ref off the ListAgents header, move ~/.claude-peers/fdb18d.md to <ref>.md (never delete), set prior_refs to fdb18d, refresh name, model, updated and protocol, send maximalist-review-wave and protocol-steward one [notice] that the memento steward continues under the new ref; then open a span and ask the owner which backlog item to start
+
+## After the 20:29 close
+
+Steward session of 2026-10-15/16 (memento-manager, ref 4400c2, member memento/steward). Took the memento plugin from claude-skills into this repository on the owner's blessing and published it (marketplace memento, plugin memento@memento). Goal 2 (tool and skills as one system) is charter-written; spec docs/specs/tool-and-skills.md carries the design. Built, all local and unpushed: launcher plugin/bin/memento, SessionStart hook printing patdown, verbs named in six skills, .memento-span file, crash-to-finding in run_checks, memento init scaffold with plugin default generated from it, commit --fold, one version 0.6.0 for tool and plugin. Open work: init --adopt for the older-shape schemas of gym and product-catalog-storage-api, the living-record verbs and commit in a linked worktree on explicit paths, triage of gym's 11 gaps, and the skill-text vocabulary (trace, baseline) against the tool's kinds. Society: joined at protocol 9, now 0.8.0 pointer; my card protocol field stays 9 until the owner reloads the plugins; the heartbeat is session cron bdfeb78e, hourly at :17, created 2026-10-14, expires 2026-10-21, prompt file docs/orchestration_log/recon/2026-10-15/memento-wake-prompt.md, to be re-laid by the heartbeat skill after the reload. Owner rules in force: owner away by default, questions only through the question tool in a turn answering the owner, no push of this public repository without the owner's word (the first push was on his yes), no Russian-authored sources, thank the origin of what is adopted in one line. Answers owed: none.
+
+## Close — 2026-10-16T12:18
+
+HEAD    358f1ee (dirty: docs/orchestration_log/history/2026-10-14/events.md, docs/orchestration_log/history/2026-10-14/session.md)
+state   tool and plugin at 0.6.0 locally (init, fold, span file, launcher, hook, six skills name verbs); 15 commits ahead of origin, unpushed, untagged, unreviewed
+        society at pointer 0.8.0, card protocol 9; heartbeat cron bdfeb78e hourly :17 expires 2026-10-21; check 0 FAIL
+open    owner: push main and tag v0.6.0, reload plugins (heartbeat skill re-lays the cron from its prompt file); no agent runs, no wait open, no held relay
+next    after the reload, re-lay the heartbeat cron from recon/2026-10-15/memento-wake-prompt.md; then init --adopt for gym and product-catalog schemas (spec decision 5), then commit in a linked worktree
