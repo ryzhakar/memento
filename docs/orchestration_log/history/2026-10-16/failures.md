@@ -15,3 +15,11 @@ What happened: The owner's silence rulings and orders (no tool no-ops, backgroun
 Mechanism: I treated the owner's messages as instructions to follow and wrote journal lines only for decisions about the work, never for the owner's rulings on how I report.
 
 Correction: Journaled them late, as received and marked late, in this file's span; the practice from now: an owner ruling on conduct is written the turn it arrives, before acting on it.
+
+## Heartbeat wakes padded the journal with nothing-new lines
+
+What happened: My hourly heartbeat wrote a journal line, a card update and a commit on every wake, 15 of 20 heartbeat lines saying nothing changed, while its own opening rule said to end the turn with no output unless something changed.
+
+Mechanism: The cron prompt I laid on 2026-10-14 ended with 'write events in the memento journal for what happened', which I read as 'write one every wake'; no record or check named a nothing-new line as padding, so the habit grew by repetition and each line cost a commit or a fold.
+
+Correction: Rewrote the wake prompt (recon/2026-10-15/memento-wake-prompt.md) so a wake with nothing changed writes no line, commits nothing, edits no card and ends with an empty reply; re-laid the cron from it; the heartbeat lines already written stay, as written traces do.
