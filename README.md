@@ -4,7 +4,12 @@ Typed reads and writes of a project's records, checked against the schema in the
 
 Run it from any directory inside the project's git checkout:
 
-    uvx --from git+https://github.com/ryzhakar/memento@v0.2.4 memento check
+    uvx --from git+https://github.com/ryzhakar/memento@v0.6.0 memento check
+
+The skills that teach agents to keep records with it ship as a plugin from this repository, at the same version:
+
+    /plugin marketplace add ryzhakar/memento
+    /plugin install memento --marketplace ryzhakar/memento
 
 `memento --help` lists the verbs. The project declares itself in `.claude/memento.yaml`: its kinds and their homes, and a top-level `project:` block holding the values memento cannot derive (ratification date, main branch, record space, code roots, history start file, measured CLI, commit type and subject word cap), and optionally `journal_corrections`: the owner-ruled commits the append-only history check skips, each a full `commit` sha and the `ruling` it rests on, an events path and minute that must resolve to an `owner | decision` line.
 
