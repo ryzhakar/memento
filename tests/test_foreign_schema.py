@@ -54,3 +54,11 @@ def test_a_file_not_found_outside_the_project_is_not_taken_for_a_missing_record(
     except FileNotFoundError:
         return
     raise AssertionError("the FileNotFoundError was swallowed")
+
+
+def test_patdown_on_a_schema_without_the_events_kind_refuses_with_exit_one(tmp_path: Path) -> None:
+    root = project_with(tmp_path, PLUGIN_DEFAULT.read_text().replace("  events:\n    home:", "  trace:\n    home:", 1))
+    done = subprocess.run([sys.executable, "-m", "memento", "patdown"], cwd=root, capture_output=True, text=True)
+    assert done.returncode == 1
+    assert "Traceback" not in done.stderr
+    assert done.stderr.startswith("refused:")

@@ -36,12 +36,17 @@ class Environment:
 
 @contextmanager
 def refusals_reported() -> Iterator[None]:
-    """Turn a refusal into its message on stderr and exit status 1."""
+    """Turn a refusal, or a schema key the schema lacks, into its message on stderr and exit status 1."""
+    from memento.findings import SchemaKeyError  # noqa: PLC0415 -- findings imports this package
+
     try:
         yield
     except Refusal as refusal:
         typer.echo(f"refused: {refusal}", err=True)
         raise typer.Exit(REFUSED_EXIT_CODE) from refusal
+    except SchemaKeyError as missing:
+        typer.echo(f"refused: the schema does not declare the key {missing}; run `memento check` to see what it lacks", err=True)
+        raise typer.Exit(REFUSED_EXIT_CODE) from missing
 
 
 def construct[Model: BaseModel](model: type[Model], **fields: object) -> Model:
