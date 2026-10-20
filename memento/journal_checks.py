@@ -10,6 +10,7 @@ from memento.findings import Corpus, Finding, fail, split_entries
 from memento.git import is_ancestor
 from memento.journal_git import HistoryStart, history_start, lines_removed_since
 from memento.journal_shapes import (
+    ROUTED_EVENT_KINDS,
     ACTOR_FIELD,
     CLOSE_HEADING,
     FAILURE_EVENT,
@@ -34,7 +35,7 @@ from memento.journal_spans import (
     span_path,
 )
 from memento.project import JournalCorrection, history_glob, project_of
-from memento.schema import DIGEST_KIND, EVENTS_KIND, FAILURE_KIND, SCHEMA_HOME, kind_for
+from memento.schema import DIGEST_KIND, EVENTS_KIND, FAILURE_KIND, SCHEMA_HOME, event_kinds_of, kind_for
 
 
 SHORT_SHA_WIDTH = 8
@@ -51,6 +52,7 @@ def written_after_ratification(corpus: Corpus, pattern: str) -> list[str]:
 
 def check_event_lines(corpus: Corpus) -> Iterator[Finding]:
     """Fail events files misdated at their first line, lines off the events shape, and time running backwards."""
+    declared_kinds = {*event_kinds_of(corpus.schema), *ROUTED_EVENT_KINDS}
     for path in written_after_ratification(corpus, "events*.md"):
         day = PurePosixPath(path).parent.name
         lines = corpus.text(path).splitlines()
@@ -63,6 +65,8 @@ def check_event_lines(corpus: Corpus) -> Iterator[Finding]:
             except Refusal as unreadable:
                 yield fail(f"{path}:{number}", str(unreadable))
                 continue
+            if event.kind not in declared_kinds:
+                yield fail(f"{path}:{number}", f"'{event.kind}' is not an event kind this schema declares ({', '.join(sorted(declared_kinds))})")
             stamp = minute(event.at)
             if stamp < previous:
                 yield fail(f"{path}:{number}", f"time {stamp} goes back from {previous}")

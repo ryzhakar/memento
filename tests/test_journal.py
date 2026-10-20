@@ -3,7 +3,6 @@
 import os
 from datetime import datetime
 from pathlib import Path
-from typing import get_args
 
 import pytest
 import yaml
@@ -12,7 +11,7 @@ from typer.testing import CliRunner
 from memento import Environment
 from memento.__main__ import CHECKS, app
 from memento.findings import split_entries
-from memento.journal_shapes import CLOSE_HEADING, LineKind, entry_text, parse_close_block, parse_event_line, parse_failure_entry
+from memento.journal_shapes import CLOSE_HEADING, entry_text, parse_close_block, parse_event_line, parse_failure_entry
 from memento.schema import KNOWN_EVENT_ROUTES
 from memento.git import git_exit_status
 from memento.store import Store
@@ -589,7 +588,10 @@ def test_a_decision_whose_what_holds_the_failure_kind_does_not_stand_for_a_failu
 
 
 def test_the_kinds_an_events_line_may_carry_are_the_schemas_event_routes() -> None:
-    assert sorted(get_args(LineKind.__value__)) == sorted(KNOWN_EVENT_ROUTES)
+    from memento.journal_shapes import ROUTED_EVENT_KINDS
+    from memento.schema import EVENT_KINDS
+
+    assert sorted((*EVENT_KINDS, *ROUTED_EVENT_KINDS)) == sorted(KNOWN_EVENT_ROUTES)
 
 
 def test_closing_where_head_names_no_commit_is_refused(record_tree: Path) -> None:
@@ -627,3 +629,29 @@ def test_a_batch_repeating_a_line_back_to_back_is_refused_whole(record_tree: Pat
     assert result.exit_code == 1
     assert "repeats the line just before it" in result.stderr
     assert (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8") == before
+
+
+def declare_event_kind(root: Path, name: str, route: str) -> None:
+    """Add an event kind of the project's own to the schema and commit it."""
+    replace_once(root, ".claude/memento.yaml", "events:\n  decision: events\n", f"events:\n  {name}: {route}\n  decision: events\n")
+    commit_tree(root, "an event kind of the project's own")
+
+
+def test_an_event_kind_the_schema_declares_for_its_events_file_is_written_and_passes_the_check(record_tree: Path) -> None:
+    declare_event_kind(record_tree, "experiment", "events")
+    result = run_memento(record_tree, "events", "add", "self", "experiment", "ran it")
+    assert result.exit_code == 0, result.stderr
+    assert (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8").endswith("| self | experiment | ran it\n")
+    assert run_memento(record_tree, "check").exit_code == 0
+
+
+def test_an_undeclared_event_kind_is_refused_naming_the_declared_ones(record_tree: Path) -> None:
+    result = run_memento(record_tree, "events", "add", "self", "experiment", "ran it")
+    assert (result.exit_code, result.stdout) == (1, "")
+    assert result.stderr.startswith("refused: 'experiment' is not an event kind (decision, discovery,")
+
+
+def test_an_event_kind_the_schema_routes_elsewhere_than_events_fails_the_structure_agreement(record_tree: Path) -> None:
+    declare_event_kind(record_tree, "experiment", "failure")
+    result = run_memento(record_tree, "events", "add", "self", "decision", "x")
+    assert (result.exit_code, "routes its own event kinds" in result.stderr) == (1, True)

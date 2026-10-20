@@ -11,11 +11,11 @@ from memento import Refusal, construct
 from memento.actor import Actor, parse_actor
 from memento.clock import MINUTE_FORMAT, minute
 from memento.findings import MINUTE
-from memento.schema import AMEND_TOGETHER, EventKind, Schema
+from memento.schema import AMEND_TOGETHER, Schema
 
 
 RoutedKind = Literal["span-event", "failure", "change"]
-SPAN_EVENT, FAILURE_EVENT, CHANGE_EVENT = get_args(RoutedKind)
+SPAN_EVENT, FAILURE_EVENT, CHANGE_EVENT = ROUTED_EVENT_KINDS = get_args(RoutedKind)
 EVENTS_SHAPE = "not 'YYYY-MM-DDTHH:MM | actor | kind | what'"
 EVENT_FIELD_SEPARATOR = " | "
 MINUTE_WIDTH = len("YYYY-MM-DDTHH:MM")
@@ -97,7 +97,7 @@ def not_an_entry_heading(text: str) -> str:
 
 
 type What = Annotated[str, AfterValidator(visible_single_line("what"))]
-type LineKind = Literal[EventKind, RoutedKind]
+type LineKind = Annotated[str, StringConstraints(pattern=r"^[a-z][a-z-]*$")]
 type CommitSha = Annotated[str, StringConstraints(pattern=rf"^{COMMIT_SHA}$")]
 type DirtyPath = Annotated[str, AfterValidator(visible_single_line("dirty path")), AfterValidator(without_dirty_path_separator)]
 type ParagraphText = Annotated[str, AfterValidator(visible_single_line("paragraph")), AfterValidator(not_an_entry_heading)]

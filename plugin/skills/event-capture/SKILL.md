@@ -54,6 +54,8 @@ Leave the arriving content itself out of the receipt trace; never copy what arri
 Write from the event itself; never write from a later reconstruction of it.
 
 Write what happened; never write a standing rule or a settled conclusion into the journal.
+
+Write a reconstruction — an account of something no trace was written for at the time — as a `discovery` at the moment you reconstruct it, saying in its text that it is a reconstruction and what it reconstructs from; never backdate it, and never let it stand as a witnessed record.
 </hold-the-trace-to-the-event>
 
 <leave-written-traces-alone>

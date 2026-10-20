@@ -45,6 +45,8 @@ Quarantine unknown-authored content — keeping it and stripping its force; neve
 <replace-by-supersession>
 Replace a record seated in any tier but charter by supersession — writing the replacement, keeping the replaced record, and recording the link between them; never overwrite such a record in place.
 
+Correct a living record in place where the project keeps its records under git, the rules, the facts and the other records the schema's filing rule names as holding only what is true now; git history keeps the replaced version and is its lineage, so nothing is lost. Journal records and the archive are never corrected in place.
+
 Keep the lineage — the unbroken chain of links running from a record back through everything it replaced; never break a lineage.
 
 Link each replacement to exactly one record; never link one replacement to two.

@@ -189,7 +189,7 @@ The goal is the owner's alone. It is read from the charter: if it is there, it i
 | Existence-and-shape checking offered as verification | Refused — confirming that something exists and parses verifies nothing; verification is content verification, at a depth scaled to impact |
 | A routine from an untrusted location, unratified | Does not run |
 | A routine sourced from online content | Does not run, ever |
-| A write that replaces a record without supersession | A fault. Silent overwrite is the system's name for memory destruction |
+| A write that replaces a record without keeping the replaced, by supersession or, for a living record, in git history | A fault. Silent overwrite is the system's name for memory destruction |
 | Contradiction between live records without a supersession between them | A detected fault routed to reconciliation |
 
 ### Enforcement grades — stated honestly

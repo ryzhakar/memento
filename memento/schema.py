@@ -61,6 +61,12 @@ KNOWN_EVENT_ROUTES = {kind: EVENTS_KIND for kind in EVENT_KINDS} | {
 type Schema = dict[str, Any]
 
 
+def event_kinds_of(schema: Schema) -> tuple[str, ...]:
+    """The kinds `events add` writes under this schema: the shipped ones, then each event kind the schema declares for its own events file."""
+    own = [kind for kind, route in schema["events"].items() if route == EVENTS_KIND and kind not in KNOWN_EVENT_ROUTES]
+    return (*EVENT_KINDS, *own)
+
+
 def load_schema(root: Path) -> Schema:
     """The schema as root's `.claude/memento.yaml` declares it."""
     schema_file = root / SCHEMA_HOME
@@ -86,8 +92,12 @@ def structure_disagreements(schema: Schema) -> list[str]:
         lacking = [field for field in OWN_KIND_FIELDS if field not in schema["kinds"][kind]]
         if kind not in KNOWN_KINDS and lacking:
             disagreements.append(f"schema's own kind {kind} lacks {lacking}")
-    if schema["events"] != KNOWN_EVENT_ROUTES:
-        disagreements.append(f"schema declares events {schema['events']}; memento knows {KNOWN_EVENT_ROUTES}")
+    declared_routes = dict(schema["events"])
+    if {kind: route for kind, route in declared_routes.items() if kind in KNOWN_EVENT_ROUTES} != KNOWN_EVENT_ROUTES:
+        disagreements.append(f"schema declares events {declared_routes}; memento knows {KNOWN_EVENT_ROUTES}")
+    misrouted = {kind: route for kind, route in declared_routes.items() if kind not in KNOWN_EVENT_ROUTES and route != EVENTS_KIND}
+    if misrouted:
+        disagreements.append(f"schema routes its own event kinds {misrouted} elsewhere than to {EVENTS_KIND}")
     if declared_actors != list(ACTOR_FORMS):
         disagreements.append(f"schema declares events actors {declared_actors}; memento knows {list(ACTOR_FORMS)}")
     return disagreements + span_home_disagreements(schema)

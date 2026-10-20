@@ -6,8 +6,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import NamedTuple
 
+import re
 import typer
-from pydantic import TypeAdapter, ValidationError
 
 from memento import Environment, Refusal, announce, construct, quiet_option, refusals_reported
 from memento.actor import Actor, Self_, parse_actor
@@ -55,7 +55,7 @@ from memento.journal_spans import (
     span_files,
     span_path,
 )
-from memento.schema import DIGEST_KIND, EVENT_KINDS, EVENTS_KIND, FAILURE_KIND, EventKind, Schema, agreeing_schema, load_corpus
+from memento.schema import DIGEST_KIND, EVENT_KINDS, EVENTS_KIND, FAILURE_KIND, Schema, agreeing_schema, event_kinds_of, load_corpus
 from memento.store import Act, Store, refuse_worktree
 
 
@@ -77,7 +77,7 @@ CLOCK_TIME_START = len("YYYY-MM-DDT")
 SESSION_TITLE = "# {day}\n"
 FAILURES_TITLE = "# {day} — failures\n"
 AFTER_CLOSE_HEADING = "## After the {time} close\n"
-EVENT_KIND_ADAPTER = TypeAdapter(EventKind)
+EVENT_KIND_SHAPE = re.compile(r"[a-z][a-z-]*")
 SPAN_VARIABLE = "MEMENTO_SPAN"
 SPAN_HELP = "The span to act on: '<date>' or '<date>-<suffix>'. Omitted, the span MEMENTO_SPAN names, else the one a .memento-span file names, else the only open span; required while several are open."
 BASELINE_SPAN_HELP = (
@@ -105,14 +105,21 @@ def refuse_disagreement(disagreement: str | None) -> None:
         raise Refusal(disagreement)
 
 
-def event_kind(text: str) -> EventKind:
-    """The event kind a kind argument names, refusing the kinds other verbs write."""
+def event_kind(text: str) -> str:
+    """The event kind a kind argument names, refusing the kinds other verbs write; whether the schema declares it is settled where the schema is read."""
     if text in ROUTED_ELSEWHERE:
         raise Refusal(ROUTED_ELSEWHERE[text])
-    try:
-        return EVENT_KIND_ADAPTER.validate_python(text)
-    except ValidationError as unknown:
-        raise Refusal(f"'{text}' is not an event kind ({', '.join(EVENT_KINDS)})") from unknown
+    if not EVENT_KIND_SHAPE.fullmatch(text):
+        raise Refusal(f"'{text}' is not an event kind ({', '.join(EVENT_KINDS)})")
+    return text
+
+
+def refuse_undeclared_kinds(requests: Sequence["EventRequest"], schema: Schema) -> None:
+    """Refuse a request whose kind the schema does not declare for its events file."""
+    declared = event_kinds_of(schema)
+    for request in requests:
+        if request.kind not in declared:
+            raise refusal_naming_line(Refusal(f"'{request.kind}' is not an event kind ({', '.join(declared)})"), request.stdin_line)
 
 
 def refuse_clock_behind(stamp: str, events_text: str) -> None:
@@ -145,7 +152,7 @@ class EventRequest(NamedTuple):
     """One event a caller asks for: its actor and kind parsed, its what still to be validated, and the stdin line it came from, if any."""
 
     actor: Actor
-    kind: EventKind
+    kind: str
     what: str
     stdin_line: int | None
 
@@ -207,6 +214,7 @@ def record_events(environment: Environment, requests: Sequence[EventRequest], wa
     """Append one line per request to the open span's events file in one act, returning the file's path and the lines."""
     root = environment.store.root
     schema = agreeing_schema(root)
+    refuse_undeclared_kinds(requests, schema)
     span = open_span_events(root, schema, wanted).span
     with span_transaction(environment.store, schema, span) as act:
         lines = event_lines(environment.now(), requests)
