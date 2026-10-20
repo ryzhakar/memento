@@ -13,7 +13,8 @@ from pydantic.fields import FieldInfo
 
 from memento import Environment, Refusal, announce, construct, known_name, quiet_option, refusals_reported
 from memento.candidate import refuse_new_failures
-from memento.findings import DATE, SHA, Corpus, Finding, fail
+from memento.findings import DATE, SHA, Corpus, Finding, fail, warn
+from memento.git import untracked_files
 from memento.pointers import ground_findings, home_of
 from memento.project import config_space, journal_space, project_of, spec_archive_path, spec_path
 from memento.schema import AMEND_TOGETHER, SCHEMA_HOME, Schema, home_pattern, load_corpus
@@ -91,6 +92,13 @@ def check_map(corpus: Corpus) -> Iterator[Finding]:
         covered = covered or any(path == product or (product.endswith(DIRECTORY_MARK) and path.startswith(product)) for product in products)
         if not covered and path not in retired:
             yield fail(path, "not a record the map lists, a declared product, or a retired path")
+
+
+def check_untracked_records(corpus: Corpus) -> Iterator[Finding]:
+    """Warn of each file in the record space that git holds no copy of: a record written and never added."""
+    for path in untracked_files(corpus.root):
+        if in_record_space(corpus.schema, path):
+            yield warn(path, "untracked: git holds no copy of this record yet; commit it or ignore it")
 
 
 def check_charter(corpus: Corpus) -> Iterator[Finding]:

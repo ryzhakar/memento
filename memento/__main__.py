@@ -33,6 +33,7 @@ KIND_GROUPS = {
 CHECKS: tuple[Check, ...] = (
     living.check_charter,
     living.check_map,
+    living.check_untracked_records,
     changelog.check_change_log,
     journal_checks.check_event_lines,
     journal_checks.check_close_blocks,

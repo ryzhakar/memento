@@ -22,6 +22,11 @@ def tracked_files(root: Path) -> list[str]:
     return git_output(root, "ls-files").splitlines()
 
 
+def untracked_files(root: Path) -> list[str]:
+    """Every path under root that git neither tracks nor ignores."""
+    return git_output(root, "ls-files", "--others", "--exclude-standard").splitlines()
+
+
 def object_exists(root: Path, revision: str) -> bool:
     """Whether git holds the object a revision names."""
     return git_exit_status(root, "cat-file", "-e", revision).returncode == 0
