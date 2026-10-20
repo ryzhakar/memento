@@ -98,13 +98,13 @@ Deliver a record bearing a mark and sitting at the home its kind gives; never de
 Read the finished record against every instruction above; never deliver one that breaks any.
 </check-the-record>
 
-<write-by-hand-or-with-the-tool>
-Write a record at its kind's home in the form the schema gives, then check it against the three points of schema-resolution before it stands; never deliver a record unchecked.
+<write-the-record-and-the-tool>
+Put each record at the place its kind belongs, in the shape the schema gives, and check it against the schema before it stands; never leave a record unchecked.
 
-Commit the records you wrote by naming their paths alone, with the commit type and subject cap the schema's project block gives; never commit a record that breaks its form.
+Commit only the records you wrote, naming them, with the commit type and subject length the schema's project section allows.
 
-Use the tool instead where `uv` is available; it is the recommended optimisation, seating each record at its kind's home, checking its shape, and refusing what the schema refuses: `memento directive` (add, replace, set a label, drop), `memento change` (add, supersede, set a field, repair, age the oldest out), `memento fact` (replace one exact passage), `memento spec` (add, replace a passage, archive), `memento baseline` (set one tracked thing), `memento measurement` (add, void), and the journal verbs `memento events`, `memento digest`, and `memento failure`; `memento commit <subject> <path>...` runs every check first and commits the named paths alone; `memento help` lists every verb.
+If `uv` is available, the tool does the placing, the checking and the committing and is the recommended way: `memento directive`, `memento change`, `memento fact`, `memento spec`, `memento baseline` and `memento measurement` write their kinds; `memento events`, `memento digest` and `memento failure` write the journal; `memento commit` checks everything first and commits the named paths alone; `memento help` lists every verb.
 
-Write by hand the kinds no verb writes (the charter, the frame, the schema, the map, the deferrals), and check them as the first paragraph says; with the tool available, `memento check` does that check.
-</write-by-hand-or-with-the-tool>
+The charter, the frame, the schema, the map and the deferrals are written by their owner or by you directly, then checked, with `memento check` if the tool is there.
+</write-the-record-and-the-tool>
 

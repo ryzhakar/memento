@@ -1,4 +1,4 @@
-"""Without uv the plugin says so and sends the agent to the skills' by-hand steps."""
+"""Without uv the plugin says so and sends the agent to the skills' steps."""
 
 import shutil
 import subprocess
@@ -44,4 +44,3 @@ def test_every_skill_naming_a_verb_frames_it_as_an_option_where_uv_is_available(
         text = skill.read_text(encoding="utf-8")
         if "`memento " in text:
             assert "`uv` is available" in text, f"{skill.parent.name} names a memento verb without framing it as an option where uv is available"
-            assert "by hand" in text, f"{skill.parent.name} names a memento verb without its by-hand route"

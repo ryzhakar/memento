@@ -6,9 +6,10 @@ from typing import Annotated
 import click
 import typer
 
+FULL_HELP_NOTE = "Each line is the short form. The long form of every verb: memento help --full; of one verb: memento <verb> --help."
 HELP_HELP = (
     "Print every verb of the tool, one per line with its first sentence (--compact, the default), or each verb with its "
-    "full help text (--full). Reads nothing from the project and writes nothing. Refuses: both --compact and --full."
+    "full help text (--full); the compact list ends with a line naming the long form. Reads nothing from the project and writes nothing. Refuses: both --compact and --full."
 )
 
 
@@ -45,3 +46,5 @@ def help_command(
             typer.echo(f"memento {path}\n{command.help or ''}\n")
         else:
             typer.echo(f"{path}: {first_sentence(command.help or '')}")
+    if not full:
+        typer.echo(FULL_HELP_NOTE)

@@ -66,15 +66,15 @@ Leave every written trace standing; never remove one.
 Stop once the event exists as a written trace in the stretch of work it occurred; never stop before it does.
 </stop-when-the-trace-exists>
 
-<write-by-hand-or-with-the-tool>
-Write each trace as one line `YYYY-MM-DDTHH:MM | <actor> | <kind> | <what>` appended after the last line of the span's events file, the actor one the schema names, the kind one the schema's event kinds name, the minute read from the clock in that turn and never earlier than the file's last line; never write a stamp from memory.
+<write-the-trace-and-the-tool>
+Write each event as one line in the span's events file: the time from the clock, who acted, what kind of event it was, and what happened; never guess the time.
 
-Write a `failure` as an entry in the failures file with a failure line in the events file pointing at it, and a `change` as an entry in the change log, each in the form the schema gives; never leave one without the other half.
+Write a failure as an entry in the failures file and a pointer line in the events, and a change as an entry in the change log; never leave one half unwritten.
 
-Close a stretch of work through the span-closure skill; never leave a span without its close.
+Close a stretch of work through the span-closure skill.
 
-Run the tool instead where `uv` is available; it is the recommended optimisation: `memento events add <actor> <kind> <what>` (or `--stdin` for a batch, one line `<actor> | <kind> | <what>` each) stamps the minute from the clock, appends after the last line, and refuses an unknown kind or actor, a clock behind the file's last line, and a closed or ambiguous span; `memento events open <what>` opens a stretch of work; `memento failure add <title> <what happened> <mechanism> <correction>` writes the failure entry and its events line in one act; `memento change add` writes a change; `memento digest close` writes the close.
+If `uv` is available, the tool does this for you and is the recommended way: `memento events add` stamps the time and refuses a wrong kind, a wrong author, a clock running backwards, or a closed span; `memento events open` starts a stretch of work; `memento failure add` writes both halves of a failure at once; `memento change add` writes a change; and `memento digest close` writes the close. `memento help` lists every verb.
 
-Write by hand where `uv` is absent or the tool refuses for a reason you cannot clear, and write the refusal as the line's reason; never leave the event unwritten.
-</write-by-hand-or-with-the-tool>
+If the tool refuses for a reason you cannot clear, write the event anyway and say why; never leave it unwritten.
+</write-the-trace-and-the-tool>
 

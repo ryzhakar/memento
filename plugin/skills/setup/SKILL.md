@@ -93,9 +93,9 @@ Let that file stand in place of the shipped default entire; never fill a gap in 
 
 Let `schema-resolution` settle which schema is in force from here on; never resolve one by hand.
 
-Run `memento init` instead where `uv` is available and the project holds none of memento's paths; it is the recommended optimisation: it writes that file with its `project:` block, the charter stub, the map, and a stub of every kind, passing the owner's answers as options (`--owner`, `--code-root`, `--commit-type`, `--words`, `--ratified-on`), refuses over any existing path and commits nothing, so the project passes `memento check` once those files are committed. By hand, write the same files in the same forms from the shipped default.
+If `uv` is available, `memento init` is the recommended way to start: it writes the configuration file, the charter stub, the map and a stub of every kind from the owner's answers (`--owner`, `--code-root`, `--commit-type`, `--words`, `--ratified-on`), refuses to overwrite anything, and commits nothing, so the project passes `memento check` once those files are committed. Without it, write the same files from the shipped default.
 
-Edit only the homes the owner chose to differ, then check the file as schema-resolution says, with `memento check` where `uv` is available; never leave a schema unchecked.
+Change only the homes the owner chose to differ, then check the file; never leave a schema unchecked.
 </write-the-configuration>
 
 <place-each-collected-file>

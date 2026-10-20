@@ -64,9 +64,9 @@ Keep the shipped default outside a scope's records; never count it as one.
 Check the shipped default against nothing; never search for a schema behind it.
 </stop-the-check-at-the-shipped-default>
 
-<check-by-hand-or-with-the-tool>
-Test every record against the schema in force on the three points above by hand, reading each record's kind, home and provenance against the declared form; never declare a record conformant that fails one.
+<check-the-records-and-the-tool>
+Check that every record has a kind the schema admits, sits where that kind belongs, and carries its provenance in the declared form; never call a record conforming that fails one of these.
 
-Run `memento check` instead where `uv` is available; it is the recommended optimisation: it tests every record on those points, refuses a schema whose structure it does not know, and prints each finding with its location.
-</check-by-hand-or-with-the-tool>
+If `uv` is available, `memento check` makes the same check for every record at once, refuses a schema it does not understand, and names each problem with its place. This is the recommended way.
+</check-the-records-and-the-tool>
 

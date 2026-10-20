@@ -13,9 +13,12 @@ if [ -f "$PROJECT_DIR/.claude/memento.yaml" ]; then
   echo
   if command -v uv >/dev/null 2>&1; then
     echo "memento patdown:"
-    (cd "$PROJECT_DIR" && "$SCRIPT_DIR/../bin/memento" patdown 2>&1) || echo "patdown did not run; read the records by hand."
+    (cd "$PROJECT_DIR" && "$SCRIPT_DIR/../bin/memento" patdown 2>&1) || echo "patdown did not run; read the records yourself, as the pat-down skill says."
+    echo
+    echo "memento verbs:"
+    (cd "$PROJECT_DIR" && "$SCRIPT_DIR/../bin/memento" help 2>&1) || echo "memento help did not run."
   else
-    echo "uv is not installed, so the memento tool is unavailable: every skill describes its step by hand; read the records as the pat-down skill says."
+    echo "uv is not installed, so the memento tool is unavailable: follow the steps each skill describes; read the records as the pat-down skill says."
   fi
 fi
 exit 0

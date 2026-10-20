@@ -109,11 +109,11 @@ Write one trace of this audit — the dated entry of what it found and repaired 
 Close the audit when the map matches the corpus, every fault stands repaired, and every lineage runs unbroken; never close before all three hold.
 </close-the-audit>
 
-<audit-by-hand-or-with-the-tool>
-Start the audit by reading every record under the project against the schema in force on kind, home and provenance, and the map against what exists; take each mismatch as a fault to repair through record-writing; never report an audit clean on the strength of a partial reading.
+<audit-the-records-and-the-tool>
+Audit by reading every record against the schema and the map against what exists, and repair each mismatch through record-writing; never call an audit clean after a partial reading.
 
-Run `memento check` first where `uv` is available; it is the recommended optimisation: it prints one `LEVEL  where  message` line per finding and a `records: <n> FAIL, <m> WARN` summary; take each line as a substrate observation naming a mismatch to repair, and never report an audit clean while it prints a FAIL.
+If `uv` is available, start with `memento check`: it lists each mismatch with its place and ends with a count of failures and warnings. Treat every line as an observation to repair, and never call the audit clean while a failure remains. This is the recommended way.
 
-Judge by hand what the check cannot: a contradiction between two records in force, content carrying no recorded author, and a pointer whose meaning has gone stale though its target exists.
-</audit-by-hand-or-with-the-tool>
+Judge yourself what the check cannot see: two records in force that contradict each other, a record with no recorded author, and a pointer whose target exists but whose meaning has gone stale.
+</audit-the-records-and-the-tool>
 
