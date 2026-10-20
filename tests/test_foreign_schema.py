@@ -78,8 +78,8 @@ def test_a_schema_omitting_a_kind_memento_is_built_on_is_still_refused() -> None
     from memento.schema import structure_disagreements
 
     schema = yaml_schema()
-    del schema["kinds"]["results"]
-    assert structure_disagreements(schema) == ["schema omits the kinds memento is built on: ['results']"]
+    del schema["kinds"]["fact"]
+    assert structure_disagreements(schema) == ["schema omits the kinds memento is built on: ['fact']"]
 
 
 def yaml_schema() -> dict:

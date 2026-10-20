@@ -2,6 +2,8 @@
 
 import subprocess
 import sys
+
+import yaml
 from pathlib import Path
 
 
@@ -83,3 +85,10 @@ def test_a_verb_in_a_project_with_no_schema_refuses_without_a_traceback(tmp_path
         assert done.returncode != 0
         assert "Traceback" not in done.stderr
         assert "memento init" in done.stderr + done.stdout
+
+
+def test_the_scaffold_declares_none_of_the_five_kinds_only_the_first_project_used() -> None:
+    from memento.scaffold import shipped_default
+
+    declared = yaml.safe_load(shipped_default())["kinds"]
+    assert not {"results", "string_recipes", "label_audit", "label_defects", "report"} & declared.keys()

@@ -2,7 +2,7 @@
 
 import fnmatch
 import re
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from pathlib import PurePosixPath
 
 from memento.findings import DATE, SHA, Corpus, Finding, fail, normalized
@@ -50,7 +50,7 @@ def revision_pointer_pattern(schema: Schema) -> re.Pattern[str]:
 
 def heading_ref_pattern(schema: Schema) -> re.Pattern[str]:
     """A `<record> § <heading>` citation, the record named by its home's file stem."""
-    stems = "|".join(re.escape(record_stem(schema, kind)) for kind in CITED_RECORD_KINDS)
+    stems = "|".join(re.escape(record_stem(schema, kind)) for kind in CITED_RECORD_KINDS if kind in schema["kinds"])
     return re.compile(rf"({stems})(?:\.md)?`?\s*§\s*([^;,()\n`]+)")
 
 
@@ -113,19 +113,24 @@ def home_of(corpus: Corpus, kind: str) -> str:
     return normalized(corpus.schema["kinds"][kind]["home"])
 
 
+def declared(corpus: Corpus, kinds: Iterable[str]) -> list[str]:
+    """The kinds among these that the schema declares: the optional ones a project may leave out are skipped."""
+    return [kind for kind in kinds if kind in corpus.schema["kinds"]]
+
+
 def check_pointers(corpus: Corpus) -> Iterator[Finding]:
     """Fail every cross-record pointer, rule citation and path whose target is absent, uncommitted or out of bounds."""
     schema = corpus.schema
-    record_files = {record_stem(schema, kind): home_of(corpus, kind) for kind in CITED_RECORD_KINDS}
+    record_files = {record_stem(schema, kind): home_of(corpus, kind) for kind in declared(corpus, CITED_RECORD_KINDS)}
     directive_stem = record_stem(schema, "directive")
     heading_ref, rule_ref = heading_ref_pattern(schema), rule_ref_pattern(schema)
     path_token, revision_pointer = path_token_pattern(schema), revision_pointer_pattern(schema)
     rule_ids = set(re.findall(r"(?m)^### ([a-z0-9-]+)$", corpus.text(record_files[directive_stem])))
     tracked_set = set(corpus.tracked)
     retired = {entry["path"] for entry in corpus.schema.get("retired", [])}
-    living = {home_of(corpus, kind) for kind in LIVING_KINDS}
+    living = {home_of(corpus, kind) for kind in declared(corpus, LIVING_KINDS)}
     bench_prefix = journal_relative_prefixes(schema)[1]
-    checked = [home_of(corpus, kind) for kind in POINTER_CHECKED_KINDS]
+    checked = [home_of(corpus, kind) for kind in declared(corpus, POINTER_CHECKED_KINDS)]
     code = [path for path in corpus.tracked if path.endswith(".py") and path.startswith(tuple(project_of(schema).code_roots))]
     for path in checked + code:
         text = corpus.text(path)
@@ -162,7 +167,7 @@ def check_pointers(corpus: Corpus) -> Iterator[Finding]:
 
 def check_no_hard_wrap(corpus: Corpus) -> Iterator[Finding]:
     """Fail authored prose continuing the line above: a paragraph or list item is one line."""
-    for kind in NO_WRAP_KINDS:
+    for kind in declared(corpus, NO_WRAP_KINDS):
         path = home_of(corpus, kind)
         fenced, previous = False, ""
         for number, line in enumerate(corpus.text(path).splitlines(), 1):

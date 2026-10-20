@@ -124,17 +124,6 @@ kinds:
       What the system is and does. Refuses edit narration, decision history,
       process, status snapshots, and measurements (measurement).
 
-  results:
-    home: docs/results.md
-    tier: dossier
-    load: need
-    verification: measured
-    columns: [approach, world, labels, folds, R@P95/fold, P@R10/fold, P@R30/fold, P@R50/fold, bar, run, verdict, date]
-    admission: >
-      Unused: this project has no contenders. Declared because memento knows
-      every kind and checks a table of these twelve
-      columns.
-
   measurement:
     home: docs/measurements.yaml
     tier: dossier
@@ -172,33 +161,6 @@ kinds:
     admission: >
       Owner-authored only, in the owner's framing. Resolved entry is deleted,
       resolution written as one events line.
-
-  string_recipes:
-    home: docs/string_comparison_recipes.md
-    tier: dossier
-    load: need
-    verification: measured
-    admission: >
-      Unused: this project compares no strings. Declared because memento knows
-      every kind and reads the file.
-
-  label_audit:
-    home: docs/label-audit-methodology.md
-    tier: dossier
-    load: need
-    verification: measured
-    admission: >
-      Unused: this project has no labels. Declared because memento knows every
-      kind and demands a map row and a file for each.
-
-  label_defects:
-    home: docs/label-data-defects.md
-    tier: dossier
-    load: need
-    verification: measured
-    admission: >
-      Unused: this project has no labels. Declared because memento knows every
-      kind and demands a map row and a file for each.
 
   reference:
     home: docs/reference/
@@ -253,16 +215,6 @@ kinds:
       entry.
     admission: One entry per failure, written the day it is diagnosed.
 
-  report:
-    home: docs/orchestration_log/history/{date}/
-    tier: journal
-    load: latent
-    verification: witnessed
-    admission: >
-      Nothing stood at ratification on 2000-01-01, and nothing is admitted
-      after: span's other orchestration artifacts go to scratch. Declared because memento derives the
-      history directory from this home.
-
   scratch:
     home: docs/orchestration_log/recon/{date}/
     tier: bench
@@ -307,7 +259,7 @@ ratification: >
   from history admission; none exists.
 
 filing:
-  - Living records (charter, frame, directive, fact, results, map, schema) hold only what is true now. Correct in place; never append corrections; never describe themselves; what a file is lives in map.
+  - Living records (charter, frame, directive, fact, map, schema) hold only what is true now. Correct in place; never append corrections; never describe themselves; what a file is lives in map.
   - A fact goes to fact, a behaviour it triggers to directive. One piece of knowledge may yield one entry in each; neither restates the other.
   - history/ holds dated journal records only. Transient orchestration artifacts go to recon/; session records point at recon paths, never copy them.
   - Authored prose has no hard line wrapping; tables, fenced blocks and field-aligned entries keep their breaks.

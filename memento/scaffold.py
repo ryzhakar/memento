@@ -50,16 +50,8 @@ STUBS = {
     ),
     "docs/architecture_log.md": "# Architecture Log\n",
     "docs/capabilities.md": "# Capabilities\n",
-    "docs/results.md": (
-        "# Results\n\nUnused by this project: no contenders. The table is the shape memento checks.\n\n"
-        "| approach | world | labels | folds | R@P95/fold | P@R10/fold | P@R30/fold | P@R50/fold | bar | run | verdict | date |\n"
-        "|---|---|---|---|---|---|---|---|---|---|---|---|\n"
-    ),
     "docs/measurements.yaml": "",
     "docs/user_deferred_items.md": "# Deferred items\n",
-    "docs/string_comparison_recipes.md": "# String-comparison recipes\n\nUnused by this project.\n",
-    "docs/label-audit-methodology.md": "# Label audit methodology\n\nUnused by this project.\n",
-    "docs/label-data-defects.md": "# Label data defects\n\nUnused by this project.\n",
     "docs/specs/.gitkeep": "",
     "docs/reference/.gitkeep": "",
     "docs/orchestration_log/archive/.gitkeep": "",
@@ -74,16 +66,11 @@ MAP_ROWS = (
     ("docs/orchestration_log/history/{date}/events*.md", "events", "start (tail)", "one line per event"),
     ("docs/orchestration_log/history/{date}/session*.md", "digest", "start (close block)", "a span's narrative and close block"),
     ("docs/capabilities.md", "fact", "need", "what the system is and does, dated"),
-    ("docs/results.md", "results", "need", "unused: no contenders; memento requires the table"),
     ("docs/measurements.yaml", "measurement", "need", "every performance reading, with its context"),
     ("docs/specs/", "spec", "need", "current specifications of unbuilt work"),
     ("docs/user_deferred_items.md", "deferral", "need", "the owner's postponed work"),
-    ("docs/string_comparison_recipes.md", "string_recipes", "need", "unused: no string comparison; memento requires the file"),
-    ("docs/label-audit-methodology.md", "label_audit", "need", "unused: no labels; memento requires the file"),
-    ("docs/label-data-defects.md", "label_defects", "need", "unused: no labels; memento requires the file"),
     ("docs/orchestration_log/history/{date}/failures*.md", "failure", "latent", "diagnosed failures"),
     ("docs/reference/", "reference", "latent", "upstream specifications as the owner supplied them"),
-    ("docs/orchestration_log/history/{date}/", "report", "latent", "nothing stood at ratification; closed to new files"),
     ("docs/orchestration_log/archive/", "archived", "latent", "out of force, kept"),
     ("docs/orchestration_log/recon/{date}/", "scratch", "latent", "drafts, claims, worker returns"),
 )

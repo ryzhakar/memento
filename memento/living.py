@@ -389,6 +389,8 @@ def table_cells(line: str) -> list[str]:
 
 def check_results_table(corpus: Corpus) -> Iterator[Finding]:
     """Fail a results table whose columns, cell counts, row contents or repeated keys break the schema's results shape."""
+    if "results" not in corpus.schema["kinds"]:
+        return
     spec = corpus.schema["kinds"]["results"]
     path = home_of(corpus, "results")
     if list(spec["columns"]) != list(RESULT_COLUMNS):

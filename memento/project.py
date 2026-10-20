@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, Validation
 
 from memento import Refusal
 from memento.findings import DATE
-from memento.schema import DIRECTORY_MARK, SCHEMA_HOME, Schema
+from memento.schema import DATE_PLACEHOLDER, DIRECTORY_MARK, SCHEMA_HOME, Schema
 
 PROJECT_KEY = "project"
 ARCHIVE_FILE_NAME = "{stem}-{first}--{last}.md"
@@ -73,8 +73,8 @@ def directory_of_dated_home(schema: Schema, kind: str) -> PurePosixPath:
 
 
 def history_directory(schema: Schema) -> str:
-    """The directory holding one directory per span day: the report kind's home without its `{date}/`."""
-    return str(directory_of_dated_home(schema, "report"))
+    """The directory holding one directory per span day: the digest kind's home up to its `{date}/`."""
+    return home_of_kind(schema, "digest").split(f"/{DATE_PLACEHOLDER}")[0]
 
 
 def history_glob(schema: Schema) -> str:
@@ -89,7 +89,8 @@ def journal_space(schema: Schema) -> str:
 
 def journal_relative_prefixes(schema: Schema) -> tuple[str, str]:
     """The journal-space-relative first segments a record's path token may start with: the history and bench directories."""
-    history, bench = (f"{directory_of_dated_home(schema, kind).name}{DIRECTORY_MARK}" for kind in ("report", "scratch"))
+    history = f"{PurePosixPath(history_directory(schema)).name}{DIRECTORY_MARK}"
+    bench = f"{directory_of_dated_home(schema, 'scratch').name}{DIRECTORY_MARK}"
     return history, bench
 
 

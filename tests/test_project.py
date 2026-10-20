@@ -22,7 +22,7 @@ from tests.conftest import HISTORY, SCHEMA_PATH, commit_tree, run_memento
 
 OTHER_HOMES: dict[str, Any] = {
     "kinds": {
-        "report": {"home": "journal/past/{date}/"},
+        "digest": {"home": "journal/past/{date}/session*.md"},
         "scratch": {"home": "journal/bench/{date}/"},
         "archived": {"home": "journal/old/"},
         "change": {"home": "notes/changes.md"},
