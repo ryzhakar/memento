@@ -14,7 +14,7 @@ from tests.test_journal import FAILURE_PARTS
 from tests.test_living import ROW_YAML, RULE_YAML, row_data, write_yaml
 
 QUIET = "--quiet"
-READ_VERBS = frozenset({("check",), ("patdown",), ("events", "tail"), ("digest", "baseline")})
+READ_VERBS = frozenset({("check",), ("patdown",), ("help",), ("events", "tail"), ("digest", "baseline")})
 Invocation = tuple[tuple[str, ...], str | None]
 Case = Callable[[Path, Path], Invocation]
 

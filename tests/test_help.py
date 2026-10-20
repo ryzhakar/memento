@@ -50,3 +50,23 @@ def test_the_map_group_has_no_verb_and_its_help_names_none() -> None:
 def test_each_set_verbs_help_names_the_refusal_that_lists_the_known_names(record_tree: Path, group: str, phrase: str) -> None:
     result = run_memento(record_tree, group, "set", "--help")
     assert (result.exit_code, phrase in " ".join(result.stdout.split())) == (0, True)
+
+
+def test_help_lists_every_verb_of_every_group_compactly(record_tree: Path) -> None:
+    result = run_memento(record_tree, "help")
+    assert result.exit_code == 0
+    listed = {line.split(":", 1)[0] for line in result.stdout.splitlines()}
+    root = typer.main.get_command(app)
+    expected = {f"{group} {verb}" for group, verbs in group_verbs().items() for verb in verbs} | {name for name, command in root.commands.items() if not isinstance(command, click.Group)}
+    assert listed == expected
+    assert all(len(line.splitlines()) == 1 for line in result.stdout.splitlines())
+
+
+def test_help_full_prints_each_verbs_whole_text_and_refuses_both_modes(record_tree: Path) -> None:
+    full = run_memento(record_tree, "help", "--full")
+    assert full.exit_code == 0
+    assert "memento baseline set" in full.stdout
+    assert "Refuses: a schema declaring no baseline kind" in full.stdout
+    both = run_memento(record_tree, "help", "--full", "--compact")
+    assert (both.exit_code, both.stdout) == (1, "")
+    assert "exclude each other" in both.stderr

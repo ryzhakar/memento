@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from memento import REFUSED_EXIT_CODE, Environment, Refusal, baseline, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, refusals_reported, scaffold, schema
+from memento import REFUSED_EXIT_CODE, Environment, Refusal, baseline, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, refusals_reported, scaffold, schema, tree_help
 from memento.findings import FAIL, Check, run_checks
 from memento.git import git_exit_status
 from memento.measure.check import check_measurement_log
@@ -60,6 +60,7 @@ for group_name, group in KIND_GROUPS.items():
 app.command("commit", help=commit.COMMIT_HELP)(commit.commit)
 app.command("patdown", help=read.PATDOWN_HELP)(read.patdown)
 app.command("init", help=scaffold.INIT_HELP)(scaffold.init)
+app.command("help", help=tree_help.HELP_HELP)(tree_help.help_command)
 
 
 def refuse_unborn_repository(root: Path) -> None:
