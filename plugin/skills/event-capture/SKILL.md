@@ -66,12 +66,15 @@ Leave every written trace standing; never remove one.
 Stop once the event exists as a written trace in the stretch of work it occurred; never stop before it does.
 </stop-when-the-trace-exists>
 
-<write-with-the-tool>
-Write each trace with `memento events add <actor> <kind> <what>`, or `--stdin` for a batch, one line `<actor> | <kind> | <what>` each; the tool stamps the minute from the clock, appends after the last line, and refuses an unknown kind or actor, a clock behind the file's last line, and a closed or ambiguous span. Open a stretch of work with `memento events open <what>`; never write a stamp by hand.
+<write-by-hand-or-with-the-tool>
+Write each trace as one line `YYYY-MM-DDTHH:MM | <actor> | <kind> | <what>` appended after the last line of the span's events file, the actor one the schema names, the kind one the schema's event kinds name, the minute read from the clock in that turn and never earlier than the file's last line; never write a stamp from memory.
 
-Write a `failure` with `memento failure add <title> <what happened> <mechanism> <correction>`, which writes the failure entry and its events line in one act, and a `change` with `memento change add`; `memento events add` refuses both kinds; never write either by hand.
+Write a `failure` as an entry in the failures file with a failure line in the events file pointing at it, and a `change` as an entry in the change log, each in the form the schema gives; never leave one without the other half.
 
-Close a stretch of work through the span-closure skill, whose `memento digest close` writes the `span-event` close; never write a close line by hand.
+Close a stretch of work through the span-closure skill; never leave a span without its close.
 
-Fall back to appending the line by hand, in the same form, where the tool refuses for a reason you cannot clear; write the refusal as the line's reason; never leave the event unwritten.
-</write-with-the-tool>
+Run the tool instead where `uv` is available; it is the recommended optimisation: `memento events add <actor> <kind> <what>` (or `--stdin` for a batch, one line `<actor> | <kind> | <what>` each) stamps the minute from the clock, appends after the last line, and refuses an unknown kind or actor, a clock behind the file's last line, and a closed or ambiguous span; `memento events open <what>` opens a stretch of work; `memento failure add <title> <what happened> <mechanism> <correction>` writes the failure entry and its events line in one act; `memento change add` writes a change; `memento digest close` writes the close.
+
+Write by hand where `uv` is absent or the tool refuses for a reason you cannot clear, and write the refusal as the line's reason; never leave the event unwritten.
+</write-by-hand-or-with-the-tool>
+

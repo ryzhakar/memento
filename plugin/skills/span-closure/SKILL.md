@@ -63,10 +63,11 @@ Write what the audit found through event-capture; never leave a waking cause fou
 Let the end come once the flush, the summary, the `baseline`, and the audit are done or written down as undone; never delay an end for a step of this procedure.
 </let-the-end-come>
 
-<close-with-the-tool>
-Write the summary and the `baseline` in one act with `memento digest close <state> <open> <next>`: it appends the close block (`HEAD` from git status, then state, open, next) to the span's session record and the `span-event` close line to its events file, stamped from the clock; add the narrative first with `memento digest add <paragraph>`, one paragraph per argument; never write a close block or a close line by hand.
+<close-by-hand-or-with-the-tool>
+Write the close by hand as the schema's digest form gives: the narrative paragraphs, then the close block `## Close — YYYY-MM-DDTHH:MM` with its `HEAD` (the sha from `git`, clean or the dirty paths), `state` (within the schema's line cap), `open` and `next` (one line) labels, then the `span-event` close line in the span's events file, each stamped from the clock; never end a stretch of work with the baseline unwritten.
 
-Run `memento check` after the close and read its FAIL count; the tool refuses an empty field, a state over the schema's line cap, a next of more than one line, and a span already closed.
+Run the tool instead where `uv` is available; it is the recommended optimisation: `memento digest close <state> <open> <next>` appends the close block (`HEAD` from git status, then state, open, next) to the span's session record and the `span-event` close line to its events file in one act, stamped from the clock, after the narrative added with `memento digest add <paragraph>`, one paragraph per argument; it refuses an empty field, a state over the schema's line cap, a next of more than one line, and a span already closed.
 
-Fall back to writing the block by hand, in the form the schema gives, where the tool refuses for a reason you cannot clear; never end a stretch of work with the baseline unwritten.
-</close-with-the-tool>
+Run `memento check` after the close where `uv` is available and read its FAIL count; by hand, read the close block against the schema's digest form.
+</close-by-hand-or-with-the-tool>
+

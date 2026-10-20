@@ -92,9 +92,10 @@ Write that file whole, carrying every kind with its home and its tier, the event
 Let that file stand in place of the shipped default entire; never fill a gap in one from the other.
 
 Let `schema-resolution` settle which schema is in force from here on; never resolve one by hand.
-Run `memento init` in a project that holds none of memento's paths to write that file with its `project:` block, the charter stub, the map, and a stub of every kind, passing the owner's answers as options (`--owner`, `--code-root`, `--commit-type`, `--words`, `--ratified-on`); it refuses over any existing path and commits nothing, so the project passes `memento check` once those files are committed; never write the file by hand where `init` can.
 
-Edit only the homes the owner chose to differ after `init` has run, then run `memento check`; never leave a schema unchecked.
+Run `memento init` instead where `uv` is available and the project holds none of memento's paths; it is the recommended optimisation: it writes that file with its `project:` block, the charter stub, the map, and a stub of every kind, passing the owner's answers as options (`--owner`, `--code-root`, `--commit-type`, `--words`, `--ratified-on`), refuses over any existing path and commits nothing, so the project passes `memento check` once those files are committed. By hand, write the same files in the same forms from the shipped default.
+
+Edit only the homes the owner chose to differ, then check the file as schema-resolution says, with `memento check` where `uv` is available; never leave a schema unchecked.
 </write-the-configuration>
 
 <place-each-collected-file>

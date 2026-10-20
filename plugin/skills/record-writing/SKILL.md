@@ -98,10 +98,13 @@ Deliver a record bearing a mark and sitting at the home its kind gives; never de
 Read the finished record against every instruction above; never deliver one that breaks any.
 </check-the-record>
 
-<write-with-the-tool>
-Write a record of a kind a verb writes through that verb, which seats it at the kind's home, checks its shape, and refuses what the schema refuses: `memento directive` (add, replace, set a label, drop), `memento change` (add, supersede, set a field, repair, age the oldest out), `memento fact` (replace one exact passage), `memento spec` (add, replace a passage, archive), `memento measurement` (add, void), and the journal verbs `memento events`, `memento digest`, and `memento failure`; never hand-edit a record a verb writes.
+<write-by-hand-or-with-the-tool>
+Write a record at its kind's home in the form the schema gives, then check it against the three points of schema-resolution before it stands; never deliver a record unchecked.
 
-Commit records with `memento commit <subject> <path>...`, which runs every check first and commits the named paths alone; never commit a record that carries a FAIL.
+Commit the records you wrote by naming their paths alone, with the commit type and subject cap the schema's project block gives; never commit a record that breaks its form.
 
-Write by hand a record of a kind no verb writes (the charter, the frame, the schema, the map, the deferrals), then run `memento check`; never leave such a record unchecked.
-</write-with-the-tool>
+Use the tool instead where `uv` is available; it is the recommended optimisation, seating each record at its kind's home, checking its shape, and refusing what the schema refuses: `memento directive` (add, replace, set a label, drop), `memento change` (add, supersede, set a field, repair, age the oldest out), `memento fact` (replace one exact passage), `memento spec` (add, replace a passage, archive), `memento baseline` (set one tracked thing), `memento measurement` (add, void), and the journal verbs `memento events`, `memento digest`, and `memento failure`; `memento commit <subject> <path>...` runs every check first and commits the named paths alone; `memento help` lists every verb.
+
+Write by hand the kinds no verb writes (the charter, the frame, the schema, the map, the deferrals), and check them as the first paragraph says; with the tool available, `memento check` does that check.
+</write-by-hand-or-with-the-tool>
+

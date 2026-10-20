@@ -2,6 +2,7 @@
 # Run the memento tool at the release matching this plugin's version, so skill text and tool never differ.
 # MEMENTO_FROM overrides the source (a path or a git URL), for testing a working tree.
 set -euo pipefail
+command -v uv >/dev/null 2>&1 || { echo "memento launcher: uv is not installed; the skills describe each step by hand, so work without the tool" >&2; exit 1; }
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$ROOT/.claude-plugin/plugin.json" | head -1)"
 [ -n "$VERSION" ] || { echo "memento launcher: no version in $ROOT/.claude-plugin/plugin.json" >&2; exit 1; }
