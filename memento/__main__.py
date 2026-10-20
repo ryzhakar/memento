@@ -6,7 +6,7 @@ from pathlib import Path
 
 import typer
 
-from memento import REFUSED_EXIT_CODE, Environment, Refusal, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, refusals_reported, scaffold, schema
+from memento import REFUSED_EXIT_CODE, Environment, Refusal, baseline, changelog, clock, commit, journal, journal_checks, living, measure, pointers, read, refusals_reported, scaffold, schema
 from memento.findings import FAIL, Check, run_checks
 from memento.git import git_exit_status
 from memento.measure.check import check_measurement_log
@@ -27,6 +27,7 @@ KIND_GROUPS = {
     "spec": living.spec_group,
     "map": living.map_group,
     "measurement": measure.measurement_group,
+    "baseline": baseline.baseline_group,
 }
 
 CHECKS: tuple[Check, ...] = (
@@ -49,6 +50,7 @@ CHECKS: tuple[Check, ...] = (
     pointers.check_history_admission,
     pointers.check_nul_bytes,
     check_measurement_log,
+    baseline.check_baseline,
     partial(schema.check_structure, registered_groups=tuple(KIND_GROUPS)),
 )
 

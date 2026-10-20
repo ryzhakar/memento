@@ -61,7 +61,7 @@ def test_an_exact_home_outranks_a_wildcard_and_a_wildcard_outranks_a_directory()
     assert [kind_for(schema, path) for path in ("docs/x.md", "docs/y.md", "docs/sub/y.md")] == ["exact", "wildcard", "directory"]
 
 
-@pytest.mark.parametrize("group", ["span", "deferral", "schema", "baseline", "charter", "frame", "reference"])
+@pytest.mark.parametrize("group", ["span", "deferral", "schema", "charter", "frame", "reference"])
 def test_no_command_exists_for_a_group_memento_does_not_have(record_tree: Path, group: str) -> None:
     result = run_memento(record_tree, group, "add")
     assert result.exit_code == USAGE_ERROR_EXIT_CODE
