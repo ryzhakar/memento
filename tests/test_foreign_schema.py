@@ -62,3 +62,30 @@ def test_patdown_on_a_schema_without_the_events_kind_refuses_with_exit_one(tmp_p
     assert done.returncode == 1
     assert "Traceback" not in done.stderr
     assert done.stderr.startswith("refused:")
+
+
+def test_a_project_declared_kind_beyond_the_known_ones_passes_the_structure_check() -> None:
+    from memento.schema import structure_disagreements
+
+    schema = yaml_schema()
+    schema["kinds"]["runbook"] = {"home": "docs/runbooks/", "tier": "dossier", "load": "need", "verification": "grounded"}
+    assert structure_disagreements(schema) == []
+    del schema["kinds"]["runbook"]["home"]
+    assert structure_disagreements(schema) == ["schema's own kind runbook lacks ['home']"]
+
+
+def test_a_schema_omitting_a_kind_memento_is_built_on_is_still_refused() -> None:
+    from memento.schema import structure_disagreements
+
+    schema = yaml_schema()
+    del schema["kinds"]["results"]
+    assert structure_disagreements(schema) == ["schema omits the kinds memento is built on: ['results']"]
+
+
+def yaml_schema() -> dict:
+    import yaml
+
+    from memento.findings import schema_mapping
+    from memento.scaffold import shipped_default
+
+    return schema_mapping(yaml.safe_load(shipped_default()))

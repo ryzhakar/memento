@@ -141,12 +141,11 @@ def test_a_schema_whose_actors_memento_does_not_know_is_refused(record_tree: Pat
     assert_refused(record_tree, message, "self", "decision", "x")
 
 
-def test_a_schema_declaring_a_kind_memento_does_not_know_is_refused(record_tree: Path) -> None:
+def test_a_schema_declaring_its_own_kind_without_its_required_fields_is_refused(record_tree: Path) -> None:
     replace_once(record_tree, ".claude/memento.yaml", "kinds:\n", "kinds:\n  ledger:\n    home: docs/ledger.md\n    load: need\n")
     result = run_memento(record_tree, "events", "add", "self", "decision", "x")
     assert (result.exit_code, result.stdout) == (1, "")
-    assert result.stderr.startswith("refused: schema declares kinds ['ledger', 'charter',")
-    assert result.stderr.endswith("; amend the module with the schema\n")
+    assert result.stderr == "refused: schema's own kind ledger lacks ['tier', 'verification']; amend the module with the schema\n"
 
 
 def record_lock_held_elsewhere(root: Path) -> bool:

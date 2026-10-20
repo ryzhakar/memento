@@ -24,6 +24,7 @@ OWNER_STATED = "owner-stated"
 EXACT_HOME_RANK = 0
 WILDCARD_HOME_RANK = 1
 DIRECTORY_HOME_RANK = 2
+OWN_KIND_FIELDS = ("home", "tier", "load", "verification")
 SPAN_HOME = re.compile(r"[^*{}]+/\{date\}/[^*{}/]+\*\.md")
 
 KNOWN_KINDS = (
@@ -83,8 +84,13 @@ def structure_disagreements(schema: Schema) -> list[str]:
     declared_kinds = list(schema["kinds"])
     declared_actors = list(schema["kinds"].get(EVENTS_KIND, {}).get("actors", []))
     disagreements = []
-    if set(declared_kinds) != set(KNOWN_KINDS):
-        disagreements.append(f"schema declares kinds {declared_kinds}; memento knows {list(KNOWN_KINDS)}")
+    missing = [kind for kind in KNOWN_KINDS if kind not in declared_kinds]
+    if missing:
+        disagreements.append(f"schema omits the kinds memento is built on: {missing}")
+    for kind in declared_kinds:
+        lacking = [field for field in OWN_KIND_FIELDS if field not in schema["kinds"][kind]]
+        if kind not in KNOWN_KINDS and lacking:
+            disagreements.append(f"schema's own kind {kind} lacks {lacking}")
     if schema["events"] != KNOWN_EVENT_ROUTES:
         disagreements.append(f"schema declares events {schema['events']}; memento knows {KNOWN_EVENT_ROUTES}")
     if declared_actors != list(ACTOR_FORMS):
