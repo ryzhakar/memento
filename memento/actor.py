@@ -1,4 +1,4 @@
-"""Who an events line names as its author: the owner, this session, a named agent, or a named tool."""
+"""Who an events line names as its author: the owner, this session, a dispatched subagent, a sibling session, or a named tool."""
 
 import re
 from typing import Annotated
@@ -9,7 +9,10 @@ from memento import Refusal
 
 ACTOR_NAME = r"[\w.-]+"
 ACTOR_FORMS = ("owner", "self", "agent:<name>", "tool:<name>")
-NAMED_ACTOR = re.compile(rf"(?P<role>agent|tool):(?P<name>{ACTOR_NAME})")
+ACTOR_SPELLINGS = "owner[:<identity>], self[:<model>], subagent:<name>, sibling:<name>, agent:<name> or tool:<name>"
+NAMED_ACTOR = re.compile(rf"(?P<role>agent|subagent|sibling|tool):(?P<name>{ACTOR_NAME})")
+OWNER_ACTOR = re.compile(r"owner:(?P<identity>[^|\n]*[^|\s\n])")
+SELF_ACTOR = re.compile(rf"self:(?P<model>{ACTOR_NAME})")
 FROZEN = ConfigDict(frozen=True, extra="forbid", strict=True, regex_engine="python-re")
 
 ActorName = Annotated[str, StringConstraints(pattern=rf"^{ACTOR_NAME}$")]
@@ -19,20 +22,22 @@ class Owner(BaseModel):
     """The human whose project this is."""
 
     model_config = FROZEN
+    identity: str | None = None
 
     def render(self) -> str:
-        """The actor as an events line spells it."""
-        return "owner"
+        """The actor as an events line spells it: the owner, or the owner's identity once the tool has stamped it."""
+        return "owner" if self.identity is None else f"owner:{self.identity}"
 
 
 class Self_(BaseModel):
     """The session writing the record."""
 
     model_config = FROZEN
+    model: str | None = None
 
     def render(self) -> str:
-        """The actor as an events line spells it."""
-        return "self"
+        """The actor as an events line spells it: this session, or its model once the tool has stamped it."""
+        return "self" if self.model is None else f"self:{self.model}"
 
 
 class Agent(BaseModel):
@@ -46,6 +51,28 @@ class Agent(BaseModel):
         return f"agent:{self.name}"
 
 
+class Subagent(BaseModel):
+    """An agent this session dispatched, by name."""
+
+    model_config = FROZEN
+    name: ActorName
+
+    def render(self) -> str:
+        """The actor as an events line spells it."""
+        return f"subagent:{self.name}"
+
+
+class Sibling(BaseModel):
+    """Another session working beside this one, by name."""
+
+    model_config = FROZEN
+    name: ActorName
+
+    def render(self) -> str:
+        """The actor as an events line spells it."""
+        return f"sibling:{self.name}"
+
+
 class Tool(BaseModel):
     """A tool, by name."""
 
@@ -57,7 +84,7 @@ class Tool(BaseModel):
         return f"tool:{self.name}"
 
 
-type Actor = Owner | Self_ | Agent | Tool
+type Actor = Owner | Self_ | Agent | Subagent | Sibling | Tool
 
 
 def parse_actor(text: str) -> Actor:
@@ -66,9 +93,14 @@ def parse_actor(text: str) -> Actor:
         return Owner()
     if text == "self":
         return Self_()
+    owner = OWNER_ACTOR.fullmatch(text)
+    if owner is not None:
+        return Owner(identity=owner["identity"])
+    stamped_self = SELF_ACTOR.fullmatch(text)
+    if stamped_self is not None:
+        return Self_(model=stamped_self["model"])
     named = NAMED_ACTOR.fullmatch(text)
     if named is None:
-        raise Refusal(f"actor '{text}' is not owner, self, agent:<name> or tool:<name>")
-    if named["role"] == "agent":
-        return Agent(name=named["name"])
-    return Tool(name=named["name"])
+        raise Refusal(f"actor '{text}' is not {ACTOR_SPELLINGS}")
+    roles = {"agent": Agent, "subagent": Subagent, "sibling": Sibling, "tool": Tool}
+    return roles[named["role"]](name=named["name"])

@@ -208,9 +208,9 @@ def commit_tree(root: Path, message: str) -> str:
     return git(root, "rev-parse", "HEAD").strip()
 
 
-def run_memento(root: Path, *args: str, now: datetime = FIXED_NOW, checks: tuple[Check, ...] = CHECKS, stdin: str | None = None) -> Any:
+def run_memento(root: Path, *args: str, now: datetime = FIXED_NOW, checks: tuple[Check, ...] = CHECKS, stdin: str | None = None, owner_identity: str | None = None, model: str | None = None) -> Any:
     """Invoke the memento CLI on a tree with a fixed clock, the given checks and the given standard input."""
-    environment = Environment(store=Store(root=root, replace_file=os.replace), now=lambda: now, checks=checks, run_git=git_exit_status)
+    environment = Environment(store=Store(root=root, replace_file=os.replace), now=lambda: now, checks=checks, run_git=git_exit_status, owner_identity=lambda: owner_identity, model=lambda: model)
     return CliRunner().invoke(app, list(args), obj=environment, input=stdin)
 
 

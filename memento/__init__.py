@@ -26,12 +26,14 @@ class Refusal(Exception):
 
 @dataclass(frozen=True)
 class Environment:
-    """What a command receives from the composition root: the record store, the clock, the record checks and the git runner."""
+    """What a command receives from the composition root: the record store, the clock, the record checks, the git runner, and the owner's identity and this session's model when the machine knows them."""
 
     store: Store
     now: Callable[[], datetime]
     checks: tuple[Check, ...]
     run_git: GitRunner
+    owner_identity: Callable[[], str | None] = lambda: None
+    model: Callable[[], str | None] = lambda: None
 
 
 @contextmanager

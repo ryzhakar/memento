@@ -98,10 +98,21 @@ def project_root() -> Path:
     return Path(shown.stdout.decode("utf-8").strip()).resolve()
 
 
+def git_identity(root: Path) -> str | None:
+    """The git user name configured for the checkout, the owner's identity, or None when none is set."""
+    named = git_exit_status(root, "config", "user.name")
+    return named.stdout.decode("utf-8").strip() or None if named.returncode == 0 else None
+
+
+def model_from_environment() -> str | None:
+    """The model this session runs, as the MEMENTO_MODEL variable names it, or None when unset."""
+    return os.environ.get("MEMENTO_MODEL", "").strip() or None
+
+
 def main() -> None:
     """Run the command against the checkout the working directory sits in, with the wall clock, atomic replacement, every check and git."""
     root = project_root()
-    app(obj=Environment(store=Store(root=root, replace_file=os.replace), now=clock.now, checks=CHECKS, run_git=git_exit_status))
+    app(obj=Environment(store=Store(root=root, replace_file=os.replace), now=clock.now, checks=CHECKS, run_git=git_exit_status, owner_identity=partial(git_identity, root), model=model_from_environment))
 
 
 if __name__ == "__main__":

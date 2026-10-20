@@ -452,7 +452,7 @@ def test_a_close_field_breaking_its_line_other_than_by_newline_is_refused(record
 
 def test_an_events_line_naming_an_unknown_actor_fails_the_events_shape(record_tree: Path) -> None:
     append_line(record_tree, OPEN_EVENTS_FILE, "2026-10-01T09:20 | someone | decision | x")
-    message = "not 'YYYY-MM-DDTHH:MM | actor | kind | what': actor 'someone' is not owner, self, agent:<name> or tool:<name>"
+    message = "not 'YYYY-MM-DDTHH:MM | actor | kind | what': actor 'someone' is not owner[:<identity>], self[:<model>], subagent:<name>, sibling:<name>, agent:<name> or tool:<name>"
     assert check_findings(record_tree) == [f"FAIL  {OPEN_EVENTS_FILE}:3  {message}"]
 
 

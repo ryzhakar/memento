@@ -65,7 +65,7 @@ def test_a_new_events_file_off_the_events_shape_is_refused(record_tree: Path) ->
         refuse_new_failures(environment_for(record_tree), changes)
     assert str(refusal.value) == (
         f"the change adds 1 FAIL: {HISTORY}/2026-10-02/events.md  not 'YYYY-MM-DDTHH:MM | actor | kind | what': "
-        "actor 'someone' is not owner, self, agent:<name> or tool:<name>"
+        "actor 'someone' is not owner[:<identity>], self[:<model>], subagent:<name>, sibling:<name>, agent:<name> or tool:<name>"
     )
 
 

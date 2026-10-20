@@ -10,7 +10,7 @@ import re
 import typer
 
 from memento import Environment, Refusal, announce, construct, quiet_option, refusals_reported
-from memento.actor import Actor, Self_, parse_actor
+from memento.actor import ACTOR_NAME, Actor, Owner, Self_, parse_actor
 from memento.clock import minute
 from memento.findings import split_entries
 from memento.journal_git import found_head
@@ -114,6 +114,17 @@ def event_kind(text: str) -> str:
     return text
 
 
+def stamped_actor(actor: Actor, environment: Environment) -> Actor:
+    """The actor with what only the machine knows added: the owner's identity, and this session's model, each when the environment holds it."""
+    if isinstance(actor, Owner) and actor.identity is None:
+        identity = environment.owner_identity()
+        return Owner(identity=identity) if identity and "|" not in identity else actor
+    if isinstance(actor, Self_) and actor.model is None:
+        model = environment.model()
+        return Self_(model=model) if model and re.fullmatch(ACTOR_NAME, model) else actor
+    return actor
+
+
 def refuse_undeclared_kinds(requests: Sequence["EventRequest"], schema: Schema) -> None:
     """Refuse a request whose kind the schema does not declare for its events file."""
     declared = event_kinds_of(schema)
@@ -215,6 +226,7 @@ def record_events(environment: Environment, requests: Sequence[EventRequest], wa
     root = environment.store.root
     schema = agreeing_schema(root)
     refuse_undeclared_kinds(requests, schema)
+    requests = [request._replace(actor=stamped_actor(request.actor, environment)) for request in requests]
     span = open_span_events(root, schema, wanted).span
     with span_transaction(environment.store, schema, span) as act:
         lines = event_lines(environment.now(), requests)
@@ -232,7 +244,7 @@ def record_events(environment: Environment, requests: Sequence[EventRequest], wa
         "(the events home, <span date>/events.md or <span date>/events-<suffix>.md), stamped by the clock. With --stdin, append one such "
         "line per stdin line '<actor> | <kind> | <what>' (a what may hold further ' | '), all in one act and all stamped alike. "
         "Reads .claude/memento.yaml and the events files; prints '<events file>: <line>' per line written. Refuses: a kind other than "
-        "decision, discovery, commitment, delegation, receipt or attenuation; an actor other than owner, self, agent:<name> or tool:<name>; "
+        "decision, discovery, commitment, delegation, receipt or attenuation; an actor other than owner[:<identity>], self[:<model>], subagent:<name>, sibling:<name>, agent:<name> or tool:<name>; "
         "a what that is not one line; --stdin beside an actor, kind or what, or neither of them; a stdin with no line, or a stdin line "
         "off '<actor> | <kind> | <what>' or holding an invalid part, which refuses the whole batch naming its line number; "
         "a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; "
@@ -243,7 +255,7 @@ def record_events(environment: Environment, requests: Sequence[EventRequest], wa
 )
 def add(
     ctx: typer.Context,
-    actor: str | None = typer.Argument(None, help="owner, self, agent:<name> or tool:<name>. Omitted with --stdin."),
+    actor: str | None = typer.Argument(None, help="owner, self, subagent:<name>, sibling:<name> or tool:<name> (agent:<name> still reads). owner is written as owner:<git user name> and self as self:<MEMENTO_MODEL> when the machine knows them. Omitted with --stdin."),
     kind: str | None = typer.Argument(None, help="decision, discovery, commitment, delegation, receipt or attenuation. Omitted with --stdin."),
     what: list[str] | None = typer.Argument(None, help="What happened; several words are joined by single spaces. Omitted with --stdin."),
     stdin: bool = typer.Option(False, "--stdin", help="Read one event per stdin line, '<actor> | <kind> | <what>', and append them all in one act."),
