@@ -4,7 +4,7 @@ Typed reads and writes of a project's records, checked against the schema in the
 
 Run it from any directory inside the project's git checkout:
 
-    uvx --from git+https://github.com/ryzhakar/memento@v0.8.1 memento check
+    uvx --from git+https://github.com/ryzhakar/memento@v0.9.0 memento check
 
 The skills that teach agents to keep records with it ship as a plugin from this repository, at the same version:
 
