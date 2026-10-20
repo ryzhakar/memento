@@ -362,13 +362,13 @@ def test_add_refuses_a_candidate_fail(record_tree: Path) -> None:
     assert "over the change budget of" in result.stderr
 
 
-def test_add_refuses_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
+def test_add_works_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
     worktree = tmp_path / "worktree"
     git(record_tree, "worktree", "add", "-q", str(worktree))
     entry_path = write_entry_yaml(tmp_path, start="2026-09-30", title="From a worktree", merged=head_sha(record_tree))
     result = run_memento(worktree, "change", "add", str(entry_path))
-    assert result.exit_code == 1
-    assert "records are written in the root checkout only" in result.stderr
+    assert result.exit_code == 0, result.stderr
+    assert "From a worktree" in (worktree / "docs/architecture_log.md").read_text(encoding="utf-8")
 
 
 def test_add_refuses_an_impossible_date_in_a_log_header(record_tree: Path) -> None:
@@ -449,12 +449,12 @@ def test_supersede_refuses_several_matches(record_tree: Path) -> None:
     assert "refused: 2 entries dated 2026-04-09 with title starting 'The frozen'; name one" in result.stderr
 
 
-def test_supersede_refuses_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
+def test_supersede_works_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
     worktree = tmp_path / "worktree"
     git(record_tree, "worktree", "add", "-q", str(worktree))
     result = run_memento(worktree, "change", "supersede", "2026-04-09", "The frozen base", "2026-09-30 — replaced")
-    assert result.exit_code == 1
-    assert "records are written in the root checkout only" in result.stderr
+    assert result.exit_code == 0, result.stderr
+    assert "2026-09-30 — replaced" in (worktree / "docs/architecture_log.md").read_text(encoding="utf-8")
 
 
 def test_supersede_refuses_a_candidate_fail(record_tree: Path) -> None:
@@ -500,15 +500,6 @@ def test_age_refuses_when_the_archive_file_exists(record_tree: Path) -> None:
     result = run_memento(record_tree, "change", "age")
     assert result.exit_code == 1
     assert "already exists" in result.stderr
-
-
-def test_age_refuses_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
-    worktree = tmp_path / "worktree"
-    git(record_tree, "worktree", "add", "-q", str(worktree))
-    set_change_budget(worktree, 1)
-    result = run_memento(worktree, "change", "age")
-    assert result.exit_code == 1
-    assert "records are written in the root checkout only" in result.stderr
 
 
 def test_age_refuses_a_candidate_fail_when_no_rung_fits_the_budget(record_tree: Path) -> None:
@@ -1100,11 +1091,11 @@ def test_change_set_lands_beside_a_failure_the_log_already_holds_and_leaves_it(r
     assert findings.endswith("records: 1 FAIL, 0 WARN\n")
 
 
-def test_change_set_refuses_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
+def test_change_set_works_in_a_worktree(record_tree: Path, tmp_path: Path) -> None:
     worktree = tmp_path / "worktree"
     git(record_tree, "worktree", "add", "-q", str(worktree))
     result = run_memento(worktree, "change", "set", FROZEN_BASE_PREFIX, "WHY", "x")
-    assert (result.exit_code, "records are written in the root checkout only" in result.stderr) == (1, True)
+    assert result.exit_code == 0, result.stderr
 
 
 def unmerged_message(sha: str) -> str:

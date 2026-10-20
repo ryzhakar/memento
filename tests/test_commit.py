@@ -79,12 +79,20 @@ def test_records_holding_a_failing_finding_are_refused(committing_tree: Path) ->
     assert_commit_refused(committing_tree, "the records hold 1 FAIL; 'memento check' lists them", "subject", OPEN_EVENTS_FILE)
 
 
-def test_a_commit_from_a_linked_worktree_is_refused(committing_tree: Path, tmp_path: Path) -> None:
+def test_a_non_journal_record_commits_from_a_linked_worktree_on_named_paths(committing_tree: Path, tmp_path: Path) -> None:
     worktree = tmp_path / "linked"
     git(committing_tree, "worktree", "add", "-q", "--detach", str(worktree))
     (worktree / CAPABILITIES).write_text("# Capabilities\n\nChanged.\n", encoding="utf-8")
+    result = run_memento(worktree, "commit", "subject", CAPABILITIES)
+    assert result.exit_code == 0, result.stderr
+    assert git(worktree, "show", "--name-only", "--format=", "HEAD").splitlines() == [CAPABILITIES]
+
+
+def test_a_journal_file_still_refuses_to_commit_from_a_linked_worktree_without_a_suffixed_span(committing_tree: Path, tmp_path: Path) -> None:
+    worktree = tmp_path / "linked"
+    git(committing_tree, "worktree", "add", "-q", "--detach", str(worktree))
     message = f"records are written in the root checkout only; this is worktree {worktree}"
-    assert_commit_refused(worktree, message, "subject", CAPABILITIES)
+    assert_commit_refused(worktree, message, "subject", OPEN_EVENTS_FILE)
 
 
 def test_a_path_staged_before_the_commit_stays_out_of_it(committing_tree: Path) -> None:
@@ -191,7 +199,7 @@ def test_the_commit_help_names_the_span_option_and_the_worktree_it_opens(record_
     result = run_memento(record_tree, "commit", "--help")
     text = " ".join(result.stdout.replace("│", " ").split())
     assert result.exit_code == 0
-    for phrase in ("--span", "in a linked worktree", "a worktree without --span naming a suffixed span", "that is not that span's events, session or failures file", "does not read MEMENTO_SPAN"):
+    for phrase in ("--span", "a linked worktree included", "a journal file in a worktree without --span naming a suffixed span", "that is not that span's events, session or failures file", "does not read MEMENTO_SPAN"):
         assert phrase in text
 
 

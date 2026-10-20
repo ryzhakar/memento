@@ -272,9 +272,10 @@ def test_a_confined_act_lands_its_own_files_in_a_linked_worktree(repository: Pat
     assert not (repository / "given.md").exists()
 
 
-def test_an_unconfined_act_refuses_in_a_linked_worktree(repository: Path, tmp_path: Path) -> None:
+def test_an_unconfined_act_lands_in_a_linked_worktree(repository: Path, tmp_path: Path) -> None:
     worktree = tmp_path / "linked"
     git(repository, "worktree", "add", "-q", "--detach", str(worktree))
-    with pytest.raises(Refusal, match="records are written in the root checkout only"):
-        with Store(root=worktree, replace_file=os.replace).transaction():
-            pass
+    with Store(root=worktree, replace_file=os.replace).transaction() as act:
+        act.append("given.md", "from the worktree\n")
+    assert (worktree / "given.md").read_text(encoding="utf-8") == "from the worktree\n"
+    assert not (repository / "given.md").exists()

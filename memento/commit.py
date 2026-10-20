@@ -12,19 +12,19 @@ from memento.git import git_exit_status, git_output
 from memento.journal_shapes import visible_single_line
 from memento.journal_spans import Span, named_span, span_files, span_or_file
 from memento.project import Project, project_of
-from memento.schema import Schema, agreeing_schema, kind_for, load_corpus
+from memento.schema import SPAN_KINDS, Schema, agreeing_schema, kind_for, load_corpus
 from memento.store import record_lock, refuse_worktree
 
 KINDS_NO_VERB_WRITES = ("label_audit", "label_defects", "report")
 OUTSIDE_MEMENTO_KIND = "scratch"
 COMMIT_HELP = (
-    "Commit record paths: run every record check, then 'git add' and 'git commit' the named paths alone in the root "
-    "checkout, or, with --span naming a suffixed span, in a linked worktree, with the one-line message "
+    "Commit record paths: run every record check, then 'git add' and 'git commit' the named paths alone in the "
+    "checkout the command runs in, a linked worktree included (its journal files only with --span naming a suffixed span), with the one-line message "
     "'<commit_type>: <subject>' and no body, the type and the subject's word cap read from the schema's project "
     "block. Reads .claude/memento.yaml, every record, and git; prints '<short sha> <commit_type>: <subject>' and one "
     "line per path. Refuses: a path no record kind covers, a scratch path or a product path; a record of a kind no "
     "memento verb writes (label_audit, label_defects, report); a path with no change; a subject over the cap or of "
-    "more than one line; any FAIL finding; a worktree without --span naming a suffixed span; with --span, a path "
+    "more than one line; any FAIL finding; a journal file in a worktree without --span naming a suffixed span; with --span, a path "
     "that is not that span's events, session or failures file; with --fold, a HEAD on a remote branch or one that "
     "changed a path the fold does not name; a commit git rejects, after which the named paths are unstaged."
 )
@@ -56,9 +56,11 @@ def refuse_long_subject(subject: str, project: Project) -> None:
         raise Refusal(f"subject runs {words} words, over {project.commit_subject_words}")
 
 
-def refuse_worktree_unless_suffixed(root: Path, span: Span | None) -> None:
-    """Refuse a linked worktree unless the commit names a suffixed span."""
-    if span is None or span.suffix is None:
+def refuse_main_journal_in_worktree(root: Path, schema: Schema, span: Span | None, records: list[str]) -> None:
+    """Refuse, in a linked worktree, a journal file unless the commit names a suffixed span; every other record may be committed there."""
+    if span is not None and span.suffix is not None:
+        return
+    if any(kind_for(schema, path) in SPAN_KINDS for path in records) or (span is not None and span.suffix is None):
         refuse_worktree(root)
 
 
@@ -108,12 +110,12 @@ def refuse_unfoldable_head(root: Path, records: list[str]) -> None:
 def commit_records(environment: Environment, subject: str, paths: list[str], span: Span | None, fold: bool = False) -> tuple[str, str, list[str]]:
     """Commit the named record paths alone under '<commit_type>: <subject>' once every check passes, returning the commit's short sha, its message and the paths; a named span confines the paths to its own journal files."""
     root = environment.store.root
-    refuse_worktree_unless_suffixed(root, span)
     message = construct(CommitMessage, subject=subject)
     schema = agreeing_schema(root)
     project = project_of(schema)
     refuse_long_subject(subject, project)
     records = [normalized(path) for path in paths]
+    refuse_main_journal_in_worktree(root, schema, span, records)
     refuse_paths_outside_span(schema, span, records)
     with record_lock(root):
         for path in records:

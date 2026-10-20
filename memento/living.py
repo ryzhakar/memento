@@ -763,7 +763,7 @@ def directive_replace_command(
         "under its heading. Reads .claude/memento.yaml and the directive record. Prints '<directive home>: <id>'. "
         "Refuses: a label that is not a rule label (naming the labels); the id does not exist; a rule whose lines "
         "do not parse; a value that is empty, blank or carries a line break; a ground naming no committed path, SHA, "
-        "record heading or dated owner ruling; any other candidate FAIL; a worktree."
+        "record heading or dated owner ruling; any other candidate FAIL."
     ),
 )
 def directive_set_command(
@@ -846,7 +846,7 @@ def results_replace_command(
         "the row after the change. Refuses: a column that is not a results column (naming the columns); no row holds "
         "the key; a row whose cell count differs from the columns; a value that is empty, blank, holds '|' or carries "
         "a line break; a date that is not a real YYYY-MM-DD; a key the change would repeat or any other candidate "
-        "FAIL; a worktree."
+        "FAIL."
     ),
 )
 def results_set_command(
@@ -900,7 +900,7 @@ def map_add(environment: Environment, kind: str, purpose: str) -> tuple[str, str
     help=(
         "Append the map row of a declared kind that has none: '| <the kind's home> | <kind> | <the kind's load> | <purpose> |', the home "
         "and load read from .claude/memento.yaml. Prints '<map home>: <kind>'. Refuses: a kind the schema does not declare; a kind that "
-        "already has a row; a purpose that is empty, holds '|' or carries a line break; any candidate FAIL other than the missing row; a worktree."
+        "already has a row; a purpose that is empty, holds '|' or carries a line break; any candidate FAIL other than the missing row."
     ),
 )
 def map_add_command(

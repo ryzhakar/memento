@@ -335,13 +335,14 @@ def test_an_operation_whose_harness_is_missing_is_refused(measured: MeasuredTree
     assert add_entry(measured, entry_spec(measured, [parsed_item(measured, measured.old)], subject=subject)).exit_code == 0
 
 
-def test_a_worktree_is_refused_and_its_log_left_alone(measured: MeasuredTree) -> None:
+def test_a_worktree_takes_the_entry_in_its_own_log_and_leaves_the_root_log_alone(measured: MeasuredTree) -> None:
     worktree = measured.scratch / "worktree"
     git(measured.root, "worktree", "add", "-q", str(worktree))
     spec = write_yaml(worktree / SPEC_DIRECTORY / "entry.yaml", entry_spec(measured, [parsed_item(measured, measured.old)]))
     result = run_memento(worktree, "measurement", "add", str(spec))
-    assert (result.exit_code, result.stdout, result.stderr) == (1, "", f"refused: records are written in the root checkout only; this is worktree {worktree}\n")
-    assert (worktree / MEASUREMENT_LOG).read_text(encoding="utf-8") == ""
+    assert result.exit_code == 0, result.stderr
+    assert (worktree / MEASUREMENT_LOG).read_text(encoding="utf-8") != ""
+    assert (measured.root / MEASUREMENT_LOG).read_text(encoding="utf-8") == ""
 
 
 def test_a_hand_edit_of_a_committed_document_fails_the_check_and_refuses_the_next_append(measured: MeasuredTree) -> None:

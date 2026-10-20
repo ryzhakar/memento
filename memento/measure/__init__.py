@@ -30,7 +30,7 @@ measurement_group.command(
         "number); a slept valid run; a level with no item, or an item off the design's levels; a run record file holding "
         "a transcription, or an inline run that is none; a missing operation harness; a stage the project's CLI at a "
         "code sha lacks; a path missing at a code sha; a sha that is no commit; a supersedes id not earlier in the log; a "
-        "day with no id left; a worktree; a change adding a records FAIL."
+        "day with no id left; a change adding a records FAIL."
     ),
 )(add_command)
 measurement_group.command(
@@ -40,6 +40,6 @@ measurement_group.command(
         "item (m-YYYYMMDD-NNN#k) does not stand, with its reason and its evidence. Reads .claude/memento.yaml, the log "
         "and the evidence. Prints '<log>: <id>'. Refuses: a target that is not an earlier measurement or an item it "
         "lacks; evidence that is neither path:line within an existing file nor a commit sha; a reason that is not one "
-        "line; a worktree; a change adding a records FAIL."
+        "line; a change adding a records FAIL."
     ),
 )(void_command)

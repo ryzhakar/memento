@@ -1,4 +1,4 @@
-"""Landing record writes: in the root checkout only, under the record lock, all of an act or none of it."""
+"""Landing record writes: in the checkout the command runs in, under the record lock, all of an act or none of it."""
 
 import contextlib
 import fcntl
@@ -79,8 +79,7 @@ class Store:
 
     @contextmanager
     def transaction(self) -> Iterator[Act]:
-        """Refuse outside the root checkout, hold the record lock, and land everything staged, or nothing."""
-        refuse_worktree(self.root)
+        """Hold the record lock in the root checkout or a linked worktree, and land everything staged, or nothing."""
         with record_lock(self.root):
             act = Act(self.root)
             yield act
@@ -96,7 +95,7 @@ class Store:
 
 
 def refuse_worktree(root: Path) -> None:
-    """Refuse a write anywhere but the repository's own checkout."""
+    """Refuse a write to the main span's journal anywhere but the repository's own checkout."""
     if is_worktree(root):
         raise Refusal(f"records are written in the root checkout only; this is worktree {root}")
 

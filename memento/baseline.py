@@ -90,7 +90,7 @@ def baseline_set(environment: Environment, thing: str, state: str, by: str) -> t
         "Set the expected state of one tracked thing: its row is replaced, or added after the last row, and a mark "
         "'— <thing> restated, measured by <by>, <today>' ends the record. Reads .claude/memento.yaml and the baseline "
         "record. Prints '<baseline home>: <thing>'. Refuses: a schema declaring no baseline kind; a thing, state or "
-        "author that is empty, holds '|' or carries a line break; a record with no table; any candidate FAIL; a worktree."
+        "author that is empty, holds '|' or carries a line break; a record with no table; any candidate FAIL."
     ),
 )
 def baseline_set_command(

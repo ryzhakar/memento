@@ -632,7 +632,7 @@ def check_change_log_pointers(corpus: Corpus) -> Iterator[Finding]:
         "calendar date or is quoted; over word_cap words outside INVALIDATES; a start before the last entry's; a last "
         "entry that does not parse; a start or end after today; a merged sha that git does not know as an ancestor of "
         "the project's main branch; EVIDENCE spanning more than one line; a schema whose change fields differ from memento's; a candidate "
-        "FAIL; a worktree."
+        "FAIL."
     ),
 )
 def add(
@@ -653,7 +653,7 @@ def add(
         "<by> as a further line of its existing SUPERSEDED-BY. Reads .claude/memento.yaml and the matching entry; "
         "prints the path written. Refuses: a <date> that is not a calendar date; zero or several matching entries; a "
         "matching entry that does not parse; the word cap broken by the addition; a schema whose change fields differ "
-        "from memento's; a candidate FAIL; a worktree."
+        "from memento's; a candidate FAIL."
     ),
 )
 def supersede(
@@ -678,7 +678,7 @@ def supersede(
         "`retired` line for the owner to add. Refuses: the log already under budget; an archive file that already "
         "exists; no whole entry whose move brings the log under budget; a moved entry that does not parse; a schema whose "
         "change fields differ from memento's; a candidate "
-        "FAIL; a worktree."
+        "FAIL."
     ),
 )
 def age(ctx: typer.Context, quiet: bool = quiet_option()) -> None:
@@ -699,7 +699,7 @@ def age(ctx: typer.Context, quiet: bool = quiet_option()) -> None:
         "prints the path written. Refuses: a field the schema does not declare (naming the fields); a value that is empty "
         "or blank; a merged sha that git does not know as an ancestor of the project's main branch; zero or several entries whose header line starts with <header-prefix>; an entry that does not parse "
         "('change repair' replaces it); a replacement that holds a FAIL of the change-log check, named; a candidate FAIL "
-        "elsewhere; a schema whose change fields differ from memento's; a worktree."
+        "elsewhere; a schema whose change fields differ from memento's."
     ),
 )
 def set_field(
@@ -724,7 +724,7 @@ def set_field(
         "that holds no FAIL of the change-log check (repair is for an entry that fails the check); a replacement that holds "
         "a FAIL of the check, named; an entry-yaml that does not read, is not UTF-8, is not valid YAML, is not a mapping, "
         "holds a key or value the entry does not take, or holds a date that is not a calendar date; a merged sha that git "
-        "does not know as an ancestor of the project's main branch; a candidate FAIL elsewhere; a worktree."
+        "does not know as an ancestor of the project's main branch; a candidate FAIL elsewhere."
     ),
 )
 def repair(

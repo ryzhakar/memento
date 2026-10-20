@@ -56,7 +56,7 @@ from memento.journal_spans import (
     span_path,
 )
 from memento.schema import DIGEST_KIND, EVENT_KINDS, EVENTS_KIND, FAILURE_KIND, EventKind, Schema, agreeing_schema, load_corpus
-from memento.store import Act, Store
+from memento.store import Act, Store, refuse_worktree
 
 
 events_group = typer.Typer(no_args_is_help=True, help="Events: open a span, add a line to its events file, tail it.")
@@ -93,7 +93,10 @@ def span_option(help_text: str = SPAN_HELP) -> str | None:
 
 def span_transaction(store: Store, schema: Schema, span: Span) -> AbstractContextManager[Act]:
     """The transaction a span's verb writes in: the main span's in the root checkout alone, a suffixed span's confined to its own files in the root checkout or a linked worktree."""
-    return store.transaction() if span.suffix is None else store.confined_transaction(span_files(schema, span))
+    if span.suffix is None:
+        refuse_worktree(store.root)
+        return store.transaction()
+    return store.confined_transaction(span_files(schema, span))
 
 
 def refuse_disagreement(disagreement: str | None) -> None:

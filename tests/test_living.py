@@ -926,3 +926,12 @@ def test_map_add_gives_a_declared_kind_without_a_row_its_row(record_tree: Path) 
     assert again.stderr == "refused: kind runbook already has a row in .claude/memento-map.md; the map carries exactly one\n"
     unknown = run_memento(record_tree, "map", "add", "nothing", "x")
     assert unknown.stderr == "refused: kind 'nothing' is not declared in the schema\n"
+
+
+def test_a_living_record_verb_lands_in_a_linked_worktree(record_tree: Path, tmp_path: Path) -> None:
+    worktree = tmp_path / "linked"
+    git(record_tree, "worktree", "add", "-q", "--detach", str(worktree))
+    result = run_memento(worktree, "fact", "replace", "slices its input.", "slices its input in pieces.")
+    assert result.exit_code == 0, result.stderr
+    assert "slices its input in pieces." in (worktree / "docs/capabilities.md").read_text(encoding="utf-8")
+    assert "slices its input in pieces." not in (record_tree / "docs/capabilities.md").read_text(encoding="utf-8")
