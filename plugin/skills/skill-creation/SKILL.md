@@ -39,9 +39,11 @@ Name each tag as an imperative verb phrase; never name a tag for its content alo
 
 Carry every instruction — one thing to do or refuse — in tag content; never carry one outside a tag.
 
-Carry a tag's whole meaning in its content; never give a tag an attribute.
+Carry a tag's whole meaning in its content; never give a tag an attribute, except the `reason` of a `never_do_this` block.
 
-Inside a tag write prose and inline backticks; never write anything else.
+Inside a tag write prose and inline backticks, and where a rule is easier shown than told, a pair of example blocks; never write anything else.
+
+Show such a rule as a `<never_do_this reason="why it fails">` block holding the wrong text, followed by a `<do_exactly_this>` block holding the right one; never show only the wrong text, and never let a block carry anything but the text it shows.
 
 Order the body as the procedure runs; never depart from that order.
 
