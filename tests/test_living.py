@@ -907,3 +907,22 @@ def test_directive_set_refuses_a_rule_whose_block_does_not_parse(record_tree: Pa
         "why",
         "x",
     )
+
+
+def test_map_add_gives_a_declared_kind_without_a_row_its_row(record_tree: Path) -> None:
+    import yaml
+
+    schema_file = record_tree / ".claude/memento.yaml"
+    schema = yaml.safe_load(schema_file.read_text(encoding="utf-8"))
+    schema["kinds"]["runbook"] = {"home": "docs/runbooks/", "tier": "dossier", "load": "need", "verification": "grounded"}
+    schema_file.write_text(yaml.safe_dump(schema, sort_keys=False, width=1000), encoding="utf-8")
+    (record_tree / "docs/runbooks").mkdir()
+    (record_tree / "docs/runbooks/.gitkeep").write_text("")
+    commit_all(record_tree)
+    result = run_memento(record_tree, "map", "add", "runbook", "how to run things")
+    assert (result.exit_code, result.stdout) == (0, ".claude/memento-map.md: runbook\n")
+    assert (record_tree / ".claude/memento-map.md").read_text(encoding="utf-8").endswith("| docs/runbooks/ | runbook | need | how to run things |\n")
+    again = run_memento(record_tree, "map", "add", "runbook", "again")
+    assert again.stderr == "refused: kind runbook already has a row in .claude/memento-map.md; the map carries exactly one\n"
+    unknown = run_memento(record_tree, "map", "add", "nothing", "x")
+    assert unknown.stderr == "refused: kind 'nothing' is not declared in the schema\n"

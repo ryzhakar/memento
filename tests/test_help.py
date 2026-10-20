@@ -41,9 +41,9 @@ def test_the_measurement_group_help_names_add_and_void() -> None:
     assert verbs_named(group_help("measurement")) == {"add", "void"}
 
 
-def test_the_map_group_has_no_verb_and_its_help_names_none() -> None:
-    assert group_verbs()["map"] == frozenset()
-    assert verbs_named(group_help("map")) == frozenset()
+def test_the_map_group_has_one_verb_and_its_help_names_it() -> None:
+    assert group_verbs()["map"] == frozenset({"add"})
+    assert verbs_named(group_help("map")) == frozenset({"add"})
 
 
 @pytest.mark.parametrize(("group", "phrase"), [("results", "(naming the columns)"), ("directive", "(naming the labels)"), ("change", "(naming the fields)")])

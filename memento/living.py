@@ -23,7 +23,7 @@ results_group = typer.Typer(no_args_is_help=True, help="Results: add a contender
 fact_group = typer.Typer(no_args_is_help=True, help="Capabilities: replace one exact passage.")
 string_recipes_group = typer.Typer(no_args_is_help=True, help="String-comparison recipes: replace one exact passage.")
 spec_group = typer.Typer(no_args_is_help=True, help="Specifications: add one, replace one exact passage, archive one.")
-map_group = typer.Typer(no_args_is_help=True, help="The map of the project's records: no verb writes it yet; 'memento check' checks it.")
+map_group = typer.Typer(no_args_is_help=True, help="The map of the project's records: add: give a declared kind its row; 'memento check' checks the whole map.")
 
 MAP_COLUMNS = 4
 MAP_HEADER_CELLS = ("path", "---")
@@ -877,6 +877,42 @@ def results_drop_command(
     with refusals_reported():
         path = results_drop(ctx.obj, approach, world)
     announce(f"{path}: ({approach}, {world})", quiet)
+
+
+def map_add(environment: Environment, kind: str, purpose: str) -> tuple[str, str]:
+    """Append the map row of a declared kind that has none, its path and load taken from the schema; returns the map's path and the kind."""
+    if not purpose.strip() or "|" in purpose or "\n" in purpose:
+        raise Refusal("purpose must be one non-empty line without '|'")
+    corpus = load_corpus(environment.store.root)
+    kinds = corpus.schema["kinds"]
+    if kind not in kinds:
+        raise Refusal(f"kind '{kind}' is not declared in the schema")
+    path = home_of(corpus, "map")
+    if any(row_kind == kind for _number, _row_path, row_kind, _load, _purpose in map_rows(corpus, path)):
+        raise Refusal(f"kind {kind} already has a row in {path}; the map carries exactly one")
+    row = f"| {kinds[kind]['home']} | {kind} | {kinds[kind]['load']} | {purpose.strip()} |\n"
+    land_text(environment, path, corpus.text(path).rstrip("\n") + "\n" + row)
+    return path, kind
+
+
+@map_group.command(
+    "add",
+    help=(
+        "Append the map row of a declared kind that has none: '| <the kind's home> | <kind> | <the kind's load> | <purpose> |', the home "
+        "and load read from .claude/memento.yaml. Prints '<map home>: <kind>'. Refuses: a kind the schema does not declare; a kind that "
+        "already has a row; a purpose that is empty, holds '|' or carries a line break; any candidate FAIL other than the missing row; a worktree."
+    ),
+)
+def map_add_command(
+    ctx: typer.Context,
+    kind: str = typer.Argument(..., help="The declared kind to give a row."),
+    purpose: str = typer.Argument(..., help="The row's purpose cell, one line."),
+    quiet: bool = quiet_option(),
+) -> None:
+    """Append the map row of a declared kind."""
+    with refusals_reported():
+        path, name = map_add(ctx.obj, kind, purpose)
+    announce(f"{path}: {name}", quiet)
 
 
 @fact_group.command(

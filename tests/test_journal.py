@@ -609,3 +609,21 @@ def test_the_file_the_project_block_names_starts_the_append_only_history(record_
     assert check_findings(record_tree) == [
         f"FAIL  {CLOSED_DAY_EVENTS}  commit {sha[:8]} removes a written line: '2026-09-30T09:05 | owner | decision | the fixture is decided'"
     ]
+
+
+def test_an_events_line_identical_to_the_one_before_it_is_refused(record_tree: Path) -> None:
+    first = run_memento(record_tree, "events", "add", "self", "decision", "x")
+    assert first.exit_code == 0
+    before = (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8")
+    second = run_memento(record_tree, "events", "add", "self", "decision", "x")
+    assert (second.exit_code, second.stdout) == (1, "")
+    assert "repeats the line just before it" in second.stderr
+    assert (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8") == before
+
+
+def test_a_batch_repeating_a_line_back_to_back_is_refused_whole(record_tree: Path) -> None:
+    before = (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8")
+    result = run_memento(record_tree, "events", "add", "--stdin", stdin="self | decision | y\nself | decision | y\n")
+    assert result.exit_code == 1
+    assert "repeats the line just before it" in result.stderr
+    assert (record_tree / OPEN_EVENTS_FILE).read_text(encoding="utf-8") == before

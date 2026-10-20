@@ -119,6 +119,15 @@ def refuse_clock_behind(stamp: str, events_text: str) -> None:
         raise Refusal(f"the clock reads {stamp}, before the events file's last line at {lines[-1][:MINUTE_WIDTH]}")
 
 
+def refuse_repeated_line(rendered: Sequence[str], events_text: str) -> None:
+    """Refuse a line identical to the line written just before it, a retried write landing twice."""
+    previous = events_text.splitlines()[-1:]
+    for line in rendered:
+        if previous and previous[0] == line:
+            raise Refusal(f"the line '{line}' repeats the line just before it; a retried write lands once")
+        previous = [line]
+
+
 def text_if_present(root: Path, path: str) -> str | None:
     """A record's text, or None when it does not exist."""
     return (root / path).read_text(encoding="utf-8") if (root / path).exists() else None
@@ -200,6 +209,7 @@ def record_events(environment: Environment, requests: Sequence[EventRequest], wa
         lines = event_lines(environment.now(), requests)
         found = open_span_events(root, schema, span)
         refuse_clock_behind(minute(lines[0].at), found.text)
+        refuse_repeated_line([line.render() for line in lines], found.text)
         act.append(found.events_file, "".join(line.render() + NEWLINE for line in lines))
     return found.events_file, [line.render() for line in lines]
 
@@ -215,7 +225,7 @@ def record_events(environment: Environment, requests: Sequence[EventRequest], wa
         "a what that is not one line; --stdin beside an actor, kind or what, or neither of them; a stdin with no line, or a stdin line "
         "off '<actor> | <kind> | <what>' or holding an invalid part, which refuses the whole batch naming its line number; "
         "a --span or MEMENTO_SPAN off the '<date>[-<suffix>]' shape, naming no events file, or naming a closed span; "
-        "no open span; several open spans and neither --span nor MEMENTO_SPAN; a clock behind the events file's last line; "
+        "no open span; several open spans and neither --span nor MEMENTO_SPAN; a clock behind the events file's last line; a line identical to the one just before it; "
         "the main span in a linked worktree (a suffixed span writes there); "
         "an events file whose working copy edits a line HEAD holds; a schema whose structure memento does not know."
     ),

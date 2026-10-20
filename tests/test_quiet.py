@@ -157,7 +157,7 @@ WRITE_CASES: dict[str, Case] = {
 
 def test_the_write_cases_cover_every_write_verb_but_the_measurement_log() -> None:
     covered = {tuple(name.split()[:2]) if name != "commit" else ("commit",) for name in WRITE_CASES}
-    assert covered == verb_paths().keys() - READ_VERBS - {("measurement", "add"), ("measurement", "void"), ("init",), ("baseline", "set")}  # init writes only into an empty repository: tests/test_scaffold.py; baseline set needs a baseline kind: tests/test_baseline.py
+    assert covered == verb_paths().keys() - READ_VERBS - {("measurement", "add"), ("measurement", "void"), ("init",), ("baseline", "set"), ("map", "add")}  # init writes only into an empty repository: tests/test_scaffold.py; baseline set needs a baseline kind: tests/test_baseline.py; map add needs a kind without a row: tests/test_living.py
 
 
 @pytest.mark.parametrize("case", WRITE_CASES.values(), ids=WRITE_CASES.keys())
