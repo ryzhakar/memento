@@ -44,3 +44,21 @@ def test_every_skill_naming_a_verb_frames_it_as_an_option_where_uv_is_available(
         text = skill.read_text(encoding="utf-8")
         if "`memento " in text:
             assert "`uv` is available" in text, f"{skill.parent.name} names a memento verb without framing it as an option where uv is available"
+
+
+def test_every_verb_a_skill_names_exists_in_the_tool() -> None:
+    import re
+
+    import click
+    import typer.main
+
+    from memento.__main__ import app
+
+    root = typer.main.get_command(app)
+    for skill in sorted((PLUGIN / "skills").glob("*/SKILL.md")):
+        for words in re.findall(r"`memento ([a-z][a-z-]*(?: [a-z][a-z-]*)?)", skill.read_text(encoding="utf-8")):
+            first, *rest = words.split()
+            assert first in root.commands, f"{skill.parent.name} names `memento {first}`, which the tool lacks"
+            command = root.commands[first]
+            if rest and isinstance(command, click.Group):
+                assert rest[0] in command.commands, f"{skill.parent.name} names `memento {first} {rest[0]}`, which the tool lacks"
