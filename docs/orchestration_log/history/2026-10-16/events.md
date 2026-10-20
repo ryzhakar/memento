@@ -78,3 +78,4 @@
 2026-10-20T14:13 | owner | decision | event kinds and actors: a shipped core plus extensibility if it works on par with no degradation, else the core closes
 2026-10-20T14:13 | owner | decision | 0.7.0 carries four small fixes: the map row on record creation, init creating failures.md, a backup before every write, a duplicate-line check
 2026-10-20T14:13 | owner | decision | "the tool is subservient to the plugin, not the other way around": where the plugin's skills and the tool disagree, the tool changes; given mid-turn through the harness, the ruling on Goal 2's coupling question
+2026-10-20T14:15 | self | decision | spec tool-and-skills amended for the owner's rulings of 2026-10-20: decision 1 now makes the tool subservient to the plugin, decision 5 drops init --adopt for a by-hand guide
