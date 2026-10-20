@@ -1,4 +1,4 @@
-"""Who an events line names as its author: the owner, this session, a dispatched subagent, a sibling session, or a named tool."""
+"""Who an events line names as its author: the owner, this session, a dispatched subagent, a peer session, or a named tool."""
 
 import re
 from typing import Annotated
@@ -9,8 +9,8 @@ from memento import Refusal
 
 ACTOR_NAME = r"[\w.-]+"
 ACTOR_FORMS = ("owner", "self", "agent:<name>", "tool:<name>")
-ACTOR_SPELLINGS = "owner[:<identity>], self[:<model>], subagent:<name>, sibling:<name>, agent:<name> or tool:<name>"
-NAMED_ACTOR = re.compile(rf"(?P<role>agent|subagent|sibling|tool):(?P<name>{ACTOR_NAME})")
+ACTOR_SPELLINGS = "owner[:<identity>], self[:<model>], subagent:<name>, peer:<name>, agent:<name> or tool:<name>"
+NAMED_ACTOR = re.compile(rf"(?P<role>agent|subagent|peer|tool):(?P<name>{ACTOR_NAME})")
 OWNER_ACTOR = re.compile(r"owner:(?P<identity>[^|\n]*[^|\s\n])")
 SELF_ACTOR = re.compile(rf"self:(?P<model>{ACTOR_NAME})")
 FROZEN = ConfigDict(frozen=True, extra="forbid", strict=True, regex_engine="python-re")
@@ -62,7 +62,7 @@ class Subagent(BaseModel):
         return f"subagent:{self.name}"
 
 
-class Sibling(BaseModel):
+class Peer(BaseModel):
     """Another session working beside this one, by name."""
 
     model_config = FROZEN
@@ -70,7 +70,7 @@ class Sibling(BaseModel):
 
     def render(self) -> str:
         """The actor as an events line spells it."""
-        return f"sibling:{self.name}"
+        return f"peer:{self.name}"
 
 
 class Tool(BaseModel):
@@ -84,7 +84,7 @@ class Tool(BaseModel):
         return f"tool:{self.name}"
 
 
-type Actor = Owner | Self_ | Agent | Subagent | Sibling | Tool
+type Actor = Owner | Self_ | Agent | Subagent | Peer | Tool
 
 
 def parse_actor(text: str) -> Actor:
@@ -102,5 +102,5 @@ def parse_actor(text: str) -> Actor:
     named = NAMED_ACTOR.fullmatch(text)
     if named is None:
         raise Refusal(f"actor '{text}' is not {ACTOR_SPELLINGS}")
-    roles = {"agent": Agent, "subagent": Subagent, "sibling": Sibling, "tool": Tool}
+    roles = {"agent": Agent, "subagent": Subagent, "peer": Peer, "tool": Tool}
     return roles[named["role"]](name=named["name"])

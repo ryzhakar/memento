@@ -48,7 +48,7 @@ def test_a_kind_the_events_file_does_not_take_is_refused_naming_where_it_goes(re
 
 @pytest.mark.parametrize("actor", ["agent:", "agents:J-b", "Owner", "tool:a b"])
 def test_an_actor_outside_the_four_forms_is_refused(record_tree: Path, actor: str) -> None:
-    assert_refused(record_tree, f"actor '{actor}' is not owner[:<identity>], self[:<model>], subagent:<name>, sibling:<name>, agent:<name> or tool:<name>", actor, "decision", "x")
+    assert_refused(record_tree, f"actor '{actor}' is not owner[:<identity>], self[:<model>], subagent:<name>, peer:<name>, agent:<name> or tool:<name>", actor, "decision", "x")
 
 
 @pytest.mark.parametrize(
@@ -201,7 +201,7 @@ VALID_FIRST_TWO = "owner | decision | the first is decided\nself | decision | th
 @pytest.mark.parametrize(
     ("third", "message"),
     [
-        ("Owner | decision | x", "stdin line 3: actor 'Owner' is not owner[:<identity>], self[:<model>], subagent:<name>, sibling:<name>, agent:<name> or tool:<name>"),
+        ("Owner | decision | x", "stdin line 3: actor 'Owner' is not owner[:<identity>], self[:<model>], subagent:<name>, peer:<name>, agent:<name> or tool:<name>"),
         ("self | decided | x", "stdin line 3: 'decided' is not an event kind (decision, discovery, commitment, delegation, receipt, attenuation)"),
         ("self | failure | x", "stdin line 3: a failure is written by 'memento failure add', which writes its entry and its events line together"),
         ("self | decision |  indented", "stdin line 3: what must start with a visible character"),
@@ -269,7 +269,7 @@ def test_without_an_identity_or_model_the_actor_stays_as_given(record_tree: Path
     assert "| self | decision | built\n" in text
 
 
-def test_a_subagent_and_a_sibling_are_actors_beside_the_older_agent_form(record_tree: Path) -> None:
-    for actor in ("subagent:dig-gym", "sibling:trainer-u3", "agent:legacy"):
+def test_a_subagent_and_a_peer_are_actors_beside_the_older_agent_form(record_tree: Path) -> None:
+    for actor in ("subagent:dig-gym", "peer:trainer-u3", "agent:legacy"):
         assert run_memento(record_tree, "events", "add", actor, "receipt", "reported").exit_code == 0
     assert run_memento(record_tree, "check").exit_code == 0
