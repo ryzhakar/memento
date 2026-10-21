@@ -1,1 +1,6 @@
 2026-10-21T12:46 | self | span-event | open; continuing after the 2026-10-21 close; baseline is that close block
+2026-10-21T16:43 | self | decision | owner queue, solved: authorship stamping built as owner[:<git identity>], self[:<model>], subagent:<name>, peer:<name> from my reading of the owner's 2026-10-20 answer; alternative: bare actors only, no identity or model suffix
+2026-10-21T16:43 | self | decision | owner queue, solved: the owner's "event kind is unrenamed trace. they just need to upgrade" read as no trim of the shipped default and gym renames trace to events by hand; alternative: trim the default to essentials
+2026-10-21T16:43 | self | decision | owner queue, solved: a "delegated" depth mark, pooled failure pairing and the retired was: check stay unbuilt for want of a definition; alternative: build the depth mark between witnessed and measured on my own definition
+2026-10-21T16:43 | self | decision | owner queue, solved: gym's schema migration is left to its maintainer with the README guide; alternative: I run the migration in gym's checkout myself
+2026-10-21T16:43 | self | decision | owner queue, unsolved: whether the queue gets a declared record kind and home, which amends the schema and needs the owner's word; until then queue entries are journal decision lines prefixed "owner queue"
