@@ -932,7 +932,7 @@ def map_add_command(
 )
 def fact_replace_command(
     ctx: typer.Context,
-    old: str = typer.Argument(..., help="The exact passage to replace."),
+    old: str = typer.Argument(..., help="The exact passage to replace. A passage starting with a dash (a markdown list item) goes after a bare -- on the command line."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
     quiet: bool = quiet_option(),
 ) -> None:
@@ -953,7 +953,7 @@ def fact_replace_command(
 )
 def string_recipes_replace_command(
     ctx: typer.Context,
-    old: str = typer.Argument(..., help="The exact passage to replace."),
+    old: str = typer.Argument(..., help="The exact passage to replace. A passage starting with a dash (a markdown list item) goes after a bare -- on the command line."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
     quiet: bool = quiet_option(),
 ) -> None:
@@ -993,7 +993,7 @@ def spec_add_command(
 def spec_replace_command(
     ctx: typer.Context,
     name: str = typer.Argument(..., help="The spec's name."),
-    old: str = typer.Argument(..., help="The exact passage to replace."),
+    old: str = typer.Argument(..., help="The exact passage to replace. A passage starting with a dash (a markdown list item) goes after a bare -- on the command line."),
     new: str = typer.Argument(..., help="The passage to put in its place."),
     quiet: bool = quiet_option(),
 ) -> None:
