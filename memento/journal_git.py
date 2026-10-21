@@ -43,7 +43,7 @@ def history_start(root: Path, recipes_file: str) -> HistoryStart | None:
 
 def journal_pathspecs(schema: Schema) -> list[str]:
     """Git pathspecs covering every journal home and the measurement log."""
-    homes = (schema["kinds"][kind]["home"].replace(DATE_PLACEHOLDER, SEGMENT_WILDCARD) for kind in JOURNAL_KINDS)
+    homes = (schema["kinds"][kind]["home"].replace(DATE_PLACEHOLDER, SEGMENT_WILDCARD) for kind in JOURNAL_KINDS if kind in schema["kinds"])
     return [f"{GLOB_PATHSPEC}{home}" for home in homes]
 
 

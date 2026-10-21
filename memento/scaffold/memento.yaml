@@ -124,53 +124,9 @@ kinds:
       What the system is and does. Refuses edit narration, decision history,
       process, status snapshots, and measurements (measurement).
 
-  measurement:
-    home: docs/measurements.yaml
-    tier: dossier
-    load: need
-    verification: measured
-    format: >
-      YAML stream, one block-form document per entry, written and read only
-      through `memento measurement`, which enforces entry shape; owner rulings are recorded in this project.
-      Memory in bytes, time in nanoseconds, each with its resolution; no floats.
-    admission: >
-      Every performance reading (wall time, CPU time, peak memory, disk,
-      throughput) of this project's commands from a run that actually
-      executed. Refuses arithmetic estimates, quality metrics, and readings
-      without code sha and machine. Other records hold no measurement; they cite
-      an entry by id, rarely. Journal-tier kinds keep their figures.
 
-  spec:
-    home: docs/specs/
-    tier: dossier
-    load: need
-    verification: grounded
-    format: >
-      One Markdown file per scope of unbuilt work, named for the scope. Each
-      decision stated once, naming owner ruling or record it rests on.
-    admission: >
-      Current specifications only: design of unbuilt work, owner rulings
-      folded in. Once built, a spec moves whole to archive. Refuses plans,
-      prompts, reviews and anything already built.
 
-  deferral:
-    home: docs/user_deferred_items.md
-    tier: dossier
-    load: need
-    verification: owner-stated
-    admission: >
-      Owner-authored only, in the owner's framing. Resolved entry is deleted,
-      resolution written as one events line.
 
-  reference:
-    home: docs/reference/
-    tier: dossier
-    load: latent
-    verification: owner-stated
-    admission: >
-      Upstream specifications the project consumes, as owner supplied them.
-      Refuses the project's reading of them (fact or frame). Superseded on
-      owner's word.
 
   events:
     home: docs/orchestration_log/history/{date}/events*.md

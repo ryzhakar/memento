@@ -255,7 +255,7 @@ def record_events(environment: Environment, requests: Sequence[EventRequest], wa
 )
 def add(
     ctx: typer.Context,
-    actor: str | None = typer.Argument(None, help="owner, self, subagent:<name>, peer:<name> or tool:<name> (agent:<name> still reads). owner is written as owner:<git user name> and self as self:<MEMENTO_MODEL> when the machine knows them. Omitted with --stdin."),
+    actor: str | None = typer.Argument(None, help="owner, self, subagent:<name>, peer:<name> or tool:<name> (agent:<name> still reads). owner is written as owner:<git user name> and self as self:<model> when the machine knows them, the model read from the harness transcript and else from MEMENTO_MODEL. Omitted with --stdin."),
     kind: str | None = typer.Argument(None, help="decision, discovery, commitment, delegation, receipt or attenuation. Omitted with --stdin."),
     what: list[str] | None = typer.Argument(None, help="What happened; several words are joined by single spaces. Omitted with --stdin."),
     stdin: bool = typer.Option(False, "--stdin", help="Read one event per stdin line, '<actor> | <kind> | <what>', and append them all in one act."),

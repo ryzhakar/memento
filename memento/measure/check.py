@@ -116,6 +116,8 @@ def document_problems(document: Measurement | Void, earlier: Sequence[Measuremen
 
 def check_measurement_log(corpus: Corpus) -> Iterator[Finding]:
     """Fail a log document that does not parse, is not canonical, breaks id order or targets, or names code git lacks."""
+    if MEASUREMENT_KIND not in corpus.schema["kinds"]:
+        return
     path = home_of(corpus, MEASUREMENT_KIND)
     history = CodeHistory(corpus.root, project_of(corpus.schema).measured_cli)
     earlier: list[Measurement | Void] = []

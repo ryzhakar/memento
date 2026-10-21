@@ -11,6 +11,7 @@ from memento.findings import FAIL, Check, run_checks
 from memento.git import git_exit_status
 from memento.measure.check import check_measurement_log
 from memento.schema import load_corpus
+from memento.session_model import detect_model
 from memento.store import Store
 
 FAILED_CHECK_EXIT_CODE = 1
@@ -106,8 +107,8 @@ def git_identity(root: Path) -> str | None:
 
 
 def model_from_environment() -> str | None:
-    """The model this session runs, as the MEMENTO_MODEL variable names it, or None when unset."""
-    return os.environ.get("MEMENTO_MODEL", "").strip() or None
+    """The model this session runs, read from the harness transcript, else from the MEMENTO_MODEL variable, else None."""
+    return detect_model(os.environ)
 
 
 def main() -> None:

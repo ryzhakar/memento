@@ -50,10 +50,6 @@ STUBS = {
     ),
     "docs/architecture_log.md": "# Architecture Log\n",
     "docs/capabilities.md": "# Capabilities\n",
-    "docs/measurements.yaml": "",
-    "docs/user_deferred_items.md": "# Deferred items\n",
-    "docs/specs/.gitkeep": "",
-    "docs/reference/.gitkeep": "",
     "docs/orchestration_log/archive/.gitkeep": "",
 }
 MAP_ROWS = (
@@ -66,11 +62,7 @@ MAP_ROWS = (
     ("docs/orchestration_log/history/{date}/events*.md", "events", "start (tail)", "one line per event"),
     ("docs/orchestration_log/history/{date}/session*.md", "digest", "start (close block)", "a span's narrative and close block"),
     ("docs/capabilities.md", "fact", "need", "what the system is and does, dated"),
-    ("docs/measurements.yaml", "measurement", "need", "every performance reading, with its context"),
-    ("docs/specs/", "spec", "need", "current specifications of unbuilt work"),
-    ("docs/user_deferred_items.md", "deferral", "need", "the owner's postponed work"),
     ("docs/orchestration_log/history/{date}/failures*.md", "failure", "latent", "diagnosed failures"),
-    ("docs/reference/", "reference", "latent", "upstream specifications as the owner supplied them"),
     ("docs/orchestration_log/archive/", "archived", "latent", "out of force, kept"),
     ("docs/orchestration_log/recon/{date}/", "scratch", "latent", "drafts, claims, worker returns"),
 )
