@@ -4,3 +4,4 @@
 2026-10-21T16:43 | self | decision | owner queue, solved: a "delegated" depth mark, pooled failure pairing and the retired was: check stay unbuilt for want of a definition; alternative: build the depth mark between witnessed and measured on my own definition
 2026-10-21T16:43 | self | decision | owner queue, solved: gym's schema migration is left to its maintainer with the README guide; alternative: I run the migration in gym's checkout myself
 2026-10-21T16:43 | self | decision | owner queue, unsolved: whether the queue gets a declared record kind and home, which amends the schema and needs the owner's word; until then queue entries are journal decision lines prefixed "owner queue"
+2026-10-21T16:43 | self | decision | card protocol field set to 0.8.0, the peers plugin version loaded after the owner's reload (loaded skill text is peers 0.8.0, pointer 0.8.0)
