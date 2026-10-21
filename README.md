@@ -4,7 +4,7 @@ Typed reads and writes of a project's records, checked against the schema in the
 
 Run it from any directory inside the project's git checkout:
 
-    uvx --from git+https://github.com/ryzhakar/memento@v0.9.0 memento check
+    uvx --from git+https://github.com/ryzhakar/memento@v0.10.0 memento check
 
 The skills that teach agents to keep records with it ship as a plugin from this repository, at the same version:
 
@@ -27,4 +27,4 @@ Develop: `uv sync && uv run python -m pytest tests -q`. Needs Python 3.12 or new
 6. List every other file under the record space as a map row, a declared product, or a retired path (a harness lock file goes in `.gitignore`).
 7. Write a change-log pointer in a fact as `decided YYYY-MM-DD, see docs/architecture_log.md`, and pair each failure entry with a failure events line (`memento failure add` does both).
 
-Checked on a copy of gym's schema: steps 1 to 3 turn the refusal into findings; steps 4 to 7 are what the remaining findings name, and I have not re-run that copy to zero. A schema in the 15-kind dialect with `baseline` (product-catalog's) already passes `memento check` at 0.9.0.
+Checked on a copy of gym's schema: steps 1 to 3 turn the refusal into findings; steps 4 to 7 are what the remaining findings name, and I have not re-run that copy to zero. A schema in the 15-kind dialect with `baseline` (product-catalog's) already passes `memento check` at 0.10.0.
