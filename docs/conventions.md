@@ -2,6 +2,13 @@
 
 ## commit & merge
 
+### work-on-the-session-branch
+when    committing or pushing in this repository
+do      commit on the steward/session branch and push that branch after each commit; move main and tags only on a trigger the owner sets
+never   commit on main or push main on my own judgment
+why     the owner loaded the git-etiquette skill on me and said he is away, so main moves only by his trigger
+ground  owner ruling, 2026-10-22, the /agent-conduct:git-etiquette order recorded in docs/orchestration_log/history/2026-10-21/events.md
+
 ## code
 
 ## measuring & quoting
