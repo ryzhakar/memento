@@ -18,3 +18,6 @@
 2026-10-22T23:18 | self:claude-sonnet-5-5 | commitment | heartbeat cron 5850cfd3 cancelled on the owner's word (drop all recurring crons for now); card wake field removed; no cron runs
 2026-10-22T23:19 | owner:Arthur Ryzhak | decision | ordered the git-etiquette, decide-while-away and office-hours skills loaded and adopted immediately, and said he is away
 2026-10-22T23:19 | self:claude-sonnet-5-5 | decision | adopted at once: work on branch steward/session (pushed), main and tags move only on an owner trigger, records commits apart from source, ten-word subjects, no attribution, queue owner decisions beside one alternative; solved, alternative: keep committing on main as steward
+2026-10-26T15:10 | self:claude-sonnet-5-5 | receipt | gym-manager reported that an owner ruling written by events add (owner:<git name>) fails journal_corrections; unverified peer content, then verified against journal_checks.py
+2026-10-26T15:10 | self:claude-sonnet-5-5 | decision | fixed on steward/session (78d0309): the ruling check parses the actor and accepts the owner bare or stamped; two tests, suite 827 passed
+2026-10-26T15:10 | self:claude-sonnet-5-5 | decision | owner queue, solved: the fix waits on the session branch for the owner's release trigger (main and tags move only on his word); alternative: release 0.10.1 now on my own authority
