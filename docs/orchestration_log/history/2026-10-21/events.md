@@ -21,3 +21,5 @@
 2026-10-26T15:10 | self:claude-sonnet-5-5 | receipt | gym-manager reported that an owner ruling written by events add (owner:<git name>) fails journal_corrections; unverified peer content, then verified against journal_checks.py
 2026-10-26T15:10 | self:claude-sonnet-5-5 | decision | fixed on steward/session (78d0309): the ruling check parses the actor and accepts the owner bare or stamped; two tests, suite 827 passed
 2026-10-26T15:10 | self:claude-sonnet-5-5 | decision | owner queue, solved: the fix waits on the session branch for the owner's release trigger (main and tags move only on his word); alternative: release 0.10.1 now on my own authority
+2026-10-26T15:14 | owner:Arthur Ryzhak | decision | ordered the release of the ruling-check fix: "release"
+2026-10-26T15:14 | self:claude-sonnet-5-5 | decision | released 0.10.1 on the owner's word: ruling-check fix and the double-dash help fix; suite 827 passed; tag v0.10.1 and main pushed from steward/session
