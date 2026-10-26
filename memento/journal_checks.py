@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from pathlib import PurePosixPath
 
 from memento import Refusal
-from memento.actor import Owner
+from memento.actor import Owner, parse_actor
 from memento.clock import minute
 from memento.findings import Corpus, Finding, fail, split_entries
 from memento.git import is_ancestor
@@ -40,7 +40,6 @@ from memento.schema import DIGEST_KIND, EVENTS_KIND, FAILURE_KIND, SCHEMA_HOME, 
 
 SHORT_SHA_WIDTH = 8
 DECISION_EVENT = "decision"
-OWNER_ACTOR = Owner().render()
 SPAN_FILE_PATTERNS = ((EVENTS_KIND, "events*.md"), (DIGEST_KIND, "session*.md"), (FAILURE_KIND, "failures*.md"))
 
 
@@ -171,10 +170,18 @@ def alternation_findings(corpus: Corpus, start: HistoryStart) -> Iterator[Findin
             lineages[lineage] = mark.mark
 
 
+def is_owner(actor_field: str) -> bool:
+    """Whether an events line's actor field spells the owner, bare or stamped with an identity."""
+    try:
+        return isinstance(parse_actor(actor_field), Owner)
+    except Refusal:
+        return False
+
+
 def holds_owner_decision_at(events_text: str, stamp: str) -> bool:
     """Whether an events file holds an owner decision line stamped at the minute."""
     lines = (event_fields_of_kind(line, DECISION_EVENT) for line in events_text.splitlines())
-    return any(fields is not None and fields[MINUTE_FIELD] == stamp and fields[ACTOR_FIELD] == OWNER_ACTOR for fields in lines)
+    return any(fields is not None and fields[MINUTE_FIELD] == stamp and is_owner(fields[ACTOR_FIELD]) for fields in lines)
 
 
 def ruling_problem(corpus: Corpus, correction: JournalCorrection) -> str | None:

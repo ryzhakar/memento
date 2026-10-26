@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+from memento.journal_checks import holds_owner_decision_at
 from tests.conftest import HISTORY, SCHEMA_PATH, commit_tree, git, replace_once, run_memento
 from tests.test_journal import append_line, check_findings, commit_recipes_at
 
@@ -155,3 +156,14 @@ def test_a_ruling_in_a_file_that_does_not_exist_fails_beside_the_pointer_check(c
     findings = check_findings(corrigible_tree)
     assert findings[0] == f"FAIL  {SCHEMA_PATH}  journal correction {sha}: ruling {ABSENT_EVENTS} does not exist"
     assert [finding.endswith(f"points at '{ABSENT_EVENTS}', which does not exist") for finding in findings[1:]] == [True]
+
+
+@pytest.mark.parametrize("actor", ["owner", "owner:Test Owner"])
+def test_a_ruling_resolves_for_the_owner_bare_or_stamped_with_an_identity(actor: str) -> None:
+    text = f"{OWNER_DECISION_MINUTE} | {actor} | decision | the owner's ruling"
+    assert holds_owner_decision_at(text, OWNER_DECISION_MINUTE)
+
+
+def test_a_ruling_does_not_resolve_for_another_actor() -> None:
+    text = f"{OWNER_DECISION_MINUTE} | self:claude-sonnet-5-5 | decision | not the owner"
+    assert not holds_owner_decision_at(text, OWNER_DECISION_MINUTE)
