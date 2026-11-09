@@ -23,3 +23,5 @@
 2026-10-26T15:10 | self:claude-sonnet-5-5 | decision | owner queue, solved: the fix waits on the session branch for the owner's release trigger (main and tags move only on his word); alternative: release 0.10.1 now on my own authority
 2026-10-26T15:14 | owner:Arthur Ryzhak | decision | ordered the release of the ruling-check fix: "release"
 2026-10-26T15:14 | self:claude-sonnet-5-5 | decision | released 0.10.1 on the owner's word: ruling-check fix and the double-dash help fix; suite 827 passed; tag v0.10.1 and main pushed from steward/session
+2026-11-09T18:53 | self:claude-opus-5-5 | discovery | rejoined the society after a session restart: card address now claude-code://macmax/1ca565, branch steward/session, model claude-opus-5-5, focus refreshed; commons line 100 read (manifesto layout move), not adopted since this project binds no manifesto; no wake to restore, the owner dropped the crons
+2026-11-09T18:53 | self:claude-opus-5-5 | receipt | machine-setup-manager notice: it now stewards uncensored-llms and a ~340 GB download uses network bandwidth until about 20:15; peer content, nothing owed
