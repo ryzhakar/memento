@@ -492,6 +492,44 @@ def test_age_refuses_when_already_under_budget(record_tree: Path) -> None:
     assert "the change log is under its budget of" in result.stderr
 
 
+def test_age_with_a_pending_entry_makes_room_the_entry_needs_and_add_then_lands(record_tree: Path) -> None:
+    log_path = record_tree / "docs/architecture_log.md"
+    run_memento(record_tree, "change", "add", str(write_entry_yaml(record_tree.parent, start="2026-09-30", title="A second entry", merged=head_sha(record_tree))))
+    per_word = fixture_schema()["token_estimate"]["tokens_per_word"]
+    text = log_path.read_text(encoding="utf-8")
+    second_entry_words = len(text[text.index("## 2026-09-30"):].split())
+    set_change_budget(record_tree, round((len(text.split()) + second_entry_words - 2) * per_word))
+    pending = write_entry_yaml(record_tree.parent, start="2026-10-01", title="A third entry", merged=head_sha(record_tree))
+    assert run_memento(record_tree, "change", "add", str(pending)).exit_code == 1
+    assert run_memento(record_tree, "change", "age").exit_code == 1
+    before = log_path.read_text(encoding="utf-8")
+    result = run_memento(record_tree, "change", "age", str(pending))
+    assert result.exit_code == 0, result.stderr
+    archive_path = result.stdout.splitlines()[0]
+    assert archive_path == "docs/orchestration_log/archive/architecture_log-2026-04-09--2026-04-09.md"
+    assert "A third entry" not in log_path.read_text(encoding="utf-8")
+    assert (record_tree / archive_path).read_text(encoding="utf-8") + log_path.read_text(encoding="utf-8").removeprefix("# Architecture Log\n\n") == before.removeprefix("# Architecture Log\n\n")
+    added = run_memento(record_tree, "change", "add", str(pending))
+    assert added.exit_code == 0, added.stderr
+    assert "## 2026-10-01 — A third entry" in log_path.read_text(encoding="utf-8")
+
+
+def test_age_with_a_pending_entry_refuses_when_log_and_entry_fit(record_tree: Path) -> None:
+    pending = write_entry_yaml(record_tree.parent, start="2026-09-30", title="A fitting entry", merged=head_sha(record_tree))
+    result = run_memento(record_tree, "change", "age", str(pending))
+    assert result.exit_code == 1
+    assert "the change log and the pending entry are under its budget of" in result.stderr
+
+
+def test_age_with_a_pending_entry_refuses_an_entry_add_would_refuse(record_tree: Path) -> None:
+    set_change_budget(record_tree, 1)
+    pending = write_entry_yaml(record_tree.parent, start="2026-09-30", title="A bad kind", kind="decorative", merged=head_sha(record_tree))
+    before = log_text(record_tree)
+    result = run_memento(record_tree, "change", "age", str(pending))
+    assert result.exit_code == 1
+    assert log_text(record_tree) == before
+
+
 def test_age_refuses_when_the_archive_file_exists(record_tree: Path) -> None:
     archive_dir = record_tree / "docs/orchestration_log/archive"
     archive_dir.mkdir(parents=True, exist_ok=True)

@@ -398,8 +398,8 @@ def entry_input(raw: Mapping[str, Any]) -> NewEntryInput:
         raise Refusal(f"{location}: {first['msg']}" if location else first["msg"]) from invalid
 
 
-def append_entry(environment: Environment, entry_path: Path) -> str:
-    """Validate and append one new entry built from entry_path's YAML to the change log, returning its path."""
+def pending_entry(environment: Environment, entry_path: Path, raws: Sequence[str]) -> ChangeEntry:
+    """The entry entry_path's YAML builds, refused on every ground 'change add' refuses it before the candidate check."""
     root, schema, spec = change_spec(environment)
     raw = read_entry_yaml(entry_path)
     refuse_quoted_date("start", raw.get("start"))
@@ -407,9 +407,6 @@ def append_entry(environment: Environment, entry_path: Path) -> str:
     data = entry_input(raw)
     entry = new_entry(data)
     refuse_entry_shape(entry, spec)
-    path, width = spec["home"], spec["label_width"]
-    current_text = (root / path).read_text(encoding="utf-8")
-    prefix, raws = split_log(current_text)
     last = parse_raw_entry(raws[-1], spec) if raws else None
     if last is not None and entry.start < last.start:
         raise Refusal(f"start {entry.start.isoformat()} is before the last entry's start {last.start.isoformat()}; entries run oldest first")
@@ -417,6 +414,16 @@ def append_entry(environment: Environment, entry_path: Path) -> str:
     refuse_future_date("start", entry.start, today)
     refuse_future_date("end", entry.end, today)
     refuse_unmerged_sha(root, schema, data.merged)
+    return entry
+
+
+def append_entry(environment: Environment, entry_path: Path) -> str:
+    """Validate and append one new entry built from entry_path's YAML to the change log, returning its path."""
+    root, _schema, spec = change_spec(environment)
+    path, width = spec["home"], spec["label_width"]
+    prefix, raws = split_log((root / path).read_text(encoding="utf-8"))
+    entry = pending_entry(environment, entry_path, raws)
+    last = parse_raw_entry(raws[-1], spec) if raws else None
     seamed = "" if last is None else with_closing_seam(last).render(width=width)
     new_text = prefix + "".join(raws[:-1]) + seamed + entry.render(width=width)
     with environment.store.transaction() as act:
@@ -449,21 +456,25 @@ def retired_entry_line(schema: Schema, archive_path: str) -> str:
     return f"- path: {archive_path}\n  superseded_by: {home_of_kind(schema, 'change')} (current entries)\n"
 
 
-def age_out(environment: Environment) -> tuple[str, str]:
-    """Move the oldest whole entries out of the change log until it is under budget, returning the archive path and its retired line."""
+def age_out(environment: Environment, entry_path: Path | None = None) -> tuple[str, str]:
+    """Move the oldest whole entries out of the change log until it, with the pending entry at entry_path when given, is under budget, returning the archive path and its retired line."""
     root, schema, spec = change_spec(environment)
     path = spec["home"]
     per_word, budget = schema["token_estimate"]["tokens_per_word"], spec["budget_tokens"]
     current_text = (root / path).read_text(encoding="utf-8")
-    if estimate_tokens(current_text, per_word) <= budget:
-        raise Refusal(f"the change log is under its budget of {budget} tokens")
     prefix, raws = split_log(current_text)
+    pending = "" if entry_path is None else pending_entry(environment, entry_path, raws).render(width=spec["label_width"])
+    if estimate_tokens(current_text + pending, per_word) <= budget:
+        subject = "the change log is" if entry_path is None else "the change log and the pending entry are"
+        raise Refusal(f"{subject} under its budget of {budget} tokens")
     remaining = list(raws)
     moved: list[str] = []
-    while remaining and estimate_tokens(prefix + "".join(remaining), per_word) > budget:
+    while remaining and estimate_tokens(prefix + "".join(remaining) + pending, per_word) > budget:
         moved.append(remaining.pop(0))
     if not moved:
         raise Refusal(f"no whole entry can move out of the change log to fit its budget of {budget} tokens")
+    if pending and estimate_tokens(prefix + "".join(remaining) + pending, per_word) > budget:
+        raise Refusal(f"the pending entry does not fit the change log's budget of {budget} tokens even with every entry moved out")
     moved_entries = [parse_raw_entry(raw, spec) for raw in moved]
     archive_path = change_log_archive_path(schema, moved_entries[0].start.isoformat(), moved_entries[-1].start.isoformat())
     if (root / archive_path).exists():
@@ -675,16 +686,23 @@ def supersede(
         "Move the change log's oldest whole entries, unedited, into "
         "<archived home>/<change log name>-<first>--<last>.md until the log is under its budget_tokens, "
         "in one act. Reads .claude/memento.yaml and the entries it moves; prints the archive path and the schema "
-        "`retired` line for the owner to add. Refuses: the log already under budget; an archive file that already "
+        "`retired` line for the owner to add. With <entry-yaml>, the entry 'change add' is about to append counts "
+        "toward the budget and is not written, so the add lands after. Refuses: the log, with the pending entry when "
+        "given, already under budget; a pending entry 'change add' would refuse; a pending entry that fits no budget "
+        "even with every entry moved out; an archive file that already "
         "exists; no whole entry whose move brings the log under budget; a moved entry that does not parse; a schema whose "
         "change fields differ from memento's; a candidate "
         "FAIL."
     ),
 )
-def age(ctx: typer.Context, quiet: bool = quiet_option()) -> None:
-    """Move the oldest whole entries out of the change log until it is under budget."""
+def age(
+    ctx: typer.Context,
+    entry_path: Path | None = typer.Argument(None, help="A pending entry's YAML, as 'change add' takes it, to make room for."),
+    quiet: bool = quiet_option(),
+) -> None:
+    """Move the oldest whole entries out of the change log until it, with any pending entry, is under budget."""
     with refusals_reported():
-        archive_path, retired_line = age_out(ctx.obj)
+        archive_path, retired_line = age_out(ctx.obj, entry_path)
     announce(f"{archive_path}\n{retired_line}", quiet)
 
 

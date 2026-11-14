@@ -191,7 +191,7 @@ def check_budgets(corpus: Corpus) -> Iterator[Finding]:
         path = home_of(corpus, kind)
         estimate = round(len(corpus.text(path).split()) * per_word)
         if estimate > spec["budget_tokens"]:
-            remedy = "; age the oldest entries as the schema's aging rule says" if "aging" in spec else ""
+            remedy = "; age the oldest entries as the schema's aging rule says" + ("; `memento change age <entry-yaml>` makes room for an entry about to be added" if kind == "change" else "") if "aging" in spec else ""
             yield fail(path, f"~{estimate} tokens, over the {kind} budget of {spec['budget_tokens']}{remedy}")
 
 
